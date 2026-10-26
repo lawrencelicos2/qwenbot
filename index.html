@@ -765,24 +765,27 @@ self.onmessage = async (ev) => {
         chat.autoTitled = true;
         const convoText = chat.messages.slice(0, 4).map(m => (m.role === 'user' ? 'User: ' : 'Assistant: ') + String(m.content).slice(0, 400)).join('\n');
         const url = grokProvider(grokKey) === 'groq' ? 'https://api.groq.com/openai/v1/chat/completions' : 'https://api.x.ai/v1/chat/completions';
-        const res = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + grokKey },
-          body: JSON.stringify({
-            model: await resolveGrokModel(),
-            max_tokens: 24,
+        const titleModel = await resolveGrokModel();
+        const body = {
+            model: titleModel,
+            max_tokens: 400, // reasoning models (gpt-oss, qwen3) spend tokens thinking before the title
             temperature: 0.3,
             messages: [
               { role: 'system', content: 'You name chats. Reply with ONLY the topic or subject of the conversation as a short title of 2 to 5 words. No quotes, no punctuation at the end, no extra text.' },
               { role: 'user', content: convoText }
             ]
-          })
+        };
+        if (/gpt-oss/i.test(titleModel)) body.reasoning_effort = 'low';
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + grokKey },
+          body: JSON.stringify(body)
         });
-        if (!res.ok) { chat.autoTitled = false; return; }
+        if (!res.ok) { chat.autoTitled = false; console.warn('Auto-title HTTP', res.status, await res.text().catch(() => '')); return; }
         const j = await res.json();
         let t = (j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || '';
         t = t.replace(/<think>[\s\S]*?<\/think>/gi, '').replace(/["'`*#]/g, '').replace(/[.!?:]+$/, '').replace(/\s+/g, ' ').trim();
-        if (!t || t.length > 60) { chat.autoTitled = false; return; }
+        if (!t || t.length > 60) { chat.autoTitled = false; console.warn('Auto-title gave unusable result:', JSON.stringify(j).slice(0, 300)); return; }
         chat.title = t;
         saveChats();
         renderHistory();
