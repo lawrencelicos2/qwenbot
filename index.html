@@ -756,6 +756,38 @@ self.onmessage = async (ev) => {
       try { localStorage.removeItem('qwen_grok_key'); } catch (e) {}
       saveGrok();
     };
+    // Quietly asks the API for a short topic/subject and uses it as the chat's name in History.
+    // Runs once per chat, in the background, only for Groq/Grok. Falls back to the first-message name on any failure.
+    async function autoTitleChat(chatId) {
+      try {
+        const chat = chats[chatId];
+        if (!chat || chat.autoTitled || provider !== 'grok' || !grokKey) return;
+        chat.autoTitled = true;
+        const convoText = chat.messages.slice(0, 4).map(m => (m.role === 'user' ? 'User: ' : 'Assistant: ') + String(m.content).slice(0, 400)).join('\n');
+        const url = grokProvider(grokKey) === 'groq' ? 'https://api.groq.com/openai/v1/chat/completions' : 'https://api.x.ai/v1/chat/completions';
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + grokKey },
+          body: JSON.stringify({
+            model: await resolveGrokModel(),
+            max_tokens: 24,
+            temperature: 0.3,
+            messages: [
+              { role: 'system', content: 'You name chats. Reply with ONLY the topic or subject of the conversation as a short title of 2 to 5 words. No quotes, no punctuation at the end, no extra text.' },
+              { role: 'user', content: convoText }
+            ]
+          })
+        });
+        if (!res.ok) { chat.autoTitled = false; return; }
+        const j = await res.json();
+        let t = (j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || '';
+        t = t.replace(/<think>[\s\S]*?<\/think>/gi, '').replace(/["'`*#]/g, '').replace(/[.!?:]+$/, '').replace(/\s+/g, ' ').trim();
+        if (!t || t.length > 60) { chat.autoTitled = false; return; }
+        chat.title = t;
+        saveChats();
+        renderHistory();
+      } catch (e) { console.warn('Auto-title failed:', e); }
+    }
     async function grokGenerate(messages, onTok) {
       if (!grokKey) throw new Error('No API key. Add one in Settings.');
       const url = grokProvider(grokKey) === 'groq' ? 'https://api.groq.com/openai/v1/chat/completions' : 'https://api.x.ai/v1/chat/completions';
@@ -1252,6 +1284,7 @@ self.onmessage = async (ev) => {
         if (stickToBottom) chatContainer.scrollTop = chatContainer.scrollHeight;
 
         saveMessage('assistant', raw);
+        if (provider === 'grok') autoTitleChat(currentChatId);
       } catch (e) {
         generating = false;
         if (raw.trim()) saveMessage('assistant', raw); // keep whatever was written before the error
