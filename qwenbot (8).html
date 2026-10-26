@@ -1,0 +1,1616 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>QwenBot</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    button, input, select, textarea { font-family: inherit; }
+    body {
+      font-family: "Roboto Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      background-color: #ffffff;
+      color: #1f2937;
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+    }
+
+    /* Side Lines - Inset 15% top/bottom, tight to scrollbar */
+    .side-line {
+      position: absolute;
+      top: 15%;
+      bottom: 15%;
+      width: 3px;
+      background-color: #e5e7eb;
+      z-index: 5;
+    }
+    .side-line.left { left: max(4px, calc(50% - 372px)); }
+    .side-line.right { left: min(calc(100% - 7px), calc(50% + 369px)); }
+
+    /* Top-left brand */
+    .brand {
+      position: absolute;
+      top: 14px;
+      left: 24px;
+      z-index: 20;
+      font-weight: 700;
+      font-size: 53px;
+      letter-spacing: -0.8px;
+      color: #333333;
+      transform: scaleY(0.96);
+      transform-origin: left center;
+      pointer-events: none;
+      user-select: none;
+    }
+
+    /* Top Utility Controls */
+    .top-controls {
+      position: absolute;
+      top: 20px;
+      right: 24px;
+      z-index: 20;
+    }
+    .settings-btn {
+      background: rgba(255, 255, 255, 0.95);
+      border: 1px solid #e5e7eb;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      color: #4b5563;
+      transition: all 0.2s ease;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    }
+    .settings-btn:hover { background: rgba(243, 244, 246, 0.9); }
+
+    .settings-dropdown {
+      position: absolute;
+      top: 50px;
+      right: 0;
+      width: 320px;
+      background: rgba(255, 255, 255, 0.92);
+      border: 1px solid #e5e7eb;
+      border-radius: 16px;
+      padding: 16px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.08);
+      display: none;
+      flex-direction: column;
+      gap: 12px;
+      z-index: 30;
+      font-size: 13px;
+    }
+    .settings-dropdown.active { display: flex; }
+
+    .setting-group { display: flex; flex-direction: column; gap: 6px; }
+    .setting-input {
+      width: 100%;
+      padding: 8px 12px;
+      border-radius: 8px;
+      border: 1px solid #e5e7eb;
+      background: #f9fafb;
+      color: #374151;
+      font-size: 12px;
+      outline: none;
+    }
+    .setting-hint { font-size: 11px; color: #6b7280; line-height: 1.4; }
+    .setting-hint a { color: #374151; }
+    .setting-label { font-weight: 600; color: #6b7280; font-size: 11px; text-transform: uppercase; }
+
+    select, button.action-btn {
+      width: 100%;
+      padding: 8px 12px;
+      border-radius: 8px;
+      border: 1px solid #e5e7eb;
+      background: #f9fafb;
+      color: #374151;
+      font-size: 12px;
+      cursor: pointer;
+      outline: none;
+    }
+    button.action-btn { background: #f3f4f6; font-weight: 500; transition: background 0.15s; text-align: center; }
+    button.action-btn:hover { background: #e5e7eb; }
+
+    .progress-bar-container {
+      width: 100%;
+      height: 8px;
+      background: #f3f4f6;
+      border-radius: 4px;
+      overflow: hidden;
+      margin-top: 4px;
+      display: none;
+    }
+    .progress-bar { height: 100%; width: 0%; background: #9ca3af; transition: width 0.1s linear; }
+
+    /* Centered Hero View */
+    .hero-container {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .hero-logo {
+      font-weight: 600;
+      font-size: 44px;
+      letter-spacing: -0.5px;
+      color: #4b5563;
+      transform: scaleY(0.95);
+      margin-bottom: 12px;
+    }
+    .hero-text {
+      font-size: 18px;
+      color: #6b7280;
+      font-weight: 400;
+      text-align: center;
+    }
+
+    /* Main Chat Stream Container */
+    .chat-container {
+      flex: 1;
+      overflow-y: auto;
+      padding: 40px 20px;
+      max-width: 720px;
+      width: 100%;
+      margin: 0 auto;
+      display: none;
+      flex-direction: column;
+      gap: 20px;
+    }
+    .chat-container.active { display: flex; }
+
+    .msg {
+      padding: 12px 16px;
+      border-radius: 12px;
+      line-height: 1.5;
+      font-size: 14px;
+      max-width: 85%;
+      flex-shrink: 0;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .fade-in { animation: fadeIn 0.5s ease-out both; }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    .msg { contain: layout style; }
+
+    /* Code blocks */
+    .codebox {
+      border: 1px solid #d1d5db;
+      border-radius: 12px;
+      margin: 10px 0;
+      overflow: hidden;
+      background: #fafafa;
+      width: 100%;
+    }
+    .code-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 6px 8px 6px 14px;
+      border-bottom: 1px solid #e5e7eb;
+      background: #f3f4f6;
+    }
+    .code-lang { font-weight: 700; font-size: 12px; color: #4b5563; }
+    .code-actions { display: flex; gap: 2px; }
+    .code-btn {
+      background: transparent;
+      border: none;
+      color: #6b7280;
+      cursor: pointer;
+      padding: 5px;
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.15s, color 0.15s;
+    }
+    .code-btn:hover { background: #e5e7eb; color: #111827; }
+    .codebox pre {
+      margin: 0;
+      padding: 12px 14px;
+      overflow-x: auto;
+      white-space: pre;
+    }
+    .codebox code {
+      color: #15803d;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    /* White edge fades (above chat/lines/scrollbar, below buttons) */
+    .fade { position: fixed; left: 0; right: 0; pointer-events: none; z-index: 10; }
+    .fade-top { top: 0; height: 90px; background: linear-gradient(to bottom, #ffffff 25%, rgba(255,255,255,0) 100%); }
+    .fade-bottom { bottom: 0; height: 130px; background: linear-gradient(to top, #ffffff 30%, rgba(255,255,255,0) 100%); }
+    .bottom-area { z-index: 15; }
+
+    /* Syntax colors (base code color = green = variables) */
+    .codebox code .tk-ctrl  { color: #7c3aed; }
+    .codebox code .tk-decl  { color: #4f46e5; }
+    .codebox code .tk-const { color: #c2410c; }
+    .codebox code .tk-logic { color: #be123c; }
+    .codebox code .tk-str   { color: #b45309; }
+    .codebox code .tk-num   { color: #1d4ed8; }
+    .codebox code .tk-com   { color: #9ca3af; font-style: italic; }
+    .codebox code .tk-fn    { color: #0e7490; }
+    .codebox code .tk-type  { color: #0369a1; }
+    .codebox code .tk-op    { color: #4b5563; }
+    .codebox code .tk-tag   { color: #be123c; }
+
+    .msg.user { align-self: flex-end; background: #f3f4f6; color: #1f2937; }
+    .msg.assistant { align-self: flex-start; background: transparent; color: #1f2937; border: 1px solid transparent; position: relative; }
+    .msg.assistant .codebox { background: #ffffff; }
+    .msg.assistant strong { font-weight: 700; }
+    .msg.assistant em { font-style: italic; }
+    .msg.assistant mark { background: #fef08a; color: inherit; padding: 0 3px; border-radius: 3px; }
+    .msg.assistant .inline-code { font-family: 'Roboto Mono', monospace; font-size: 0.9em; background: #f3f4f6; padding: 1px 5px; border-radius: 4px; }
+    /* When the reply finishes: outline draws first, then the grey fill drops down like a curtain behind a matte black CRT line */
+    .msg.assistant.done { border-color: #e5e7eb; transition: border-color 0.4s ease; }
+    .msg.assistant.done::before {
+      content: ''; position: absolute; inset: -1px; border-radius: 12px; background: #f9fafb; z-index: -1;
+      clip-path: inset(0 0 100% 0);
+      animation: crtFill 0.7s linear 0.4s forwards;
+    }
+    .msg.assistant.done::after {
+      content: ''; position: absolute; left: 0; right: 0; top: 0; height: 2px; z-index: 1; opacity: 0; pointer-events: none;
+      background: #000;
+      animation: crtScan 0.7s linear 0.4s forwards;
+    }
+    @keyframes crtFill { from { clip-path: inset(0 0 100% 0); } to { clip-path: inset(0 0 0 0); } }
+    @keyframes crtScan { 0% { top: 0; opacity: 1; } 90% { opacity: 1; } 100% { top: calc(100% - 2px); opacity: 0; } }
+    .msg.assistant.static::before { animation: none; clip-path: inset(0 0 0 0); }
+    .msg.assistant.static::after { display: none; }
+
+    /* Copy button under the AI bubble: fades in right after the curtain fill finishes (0.4s + 0.7s) */
+    .msg-actions { align-self: flex-start; display: flex; margin: -14px 0 0 6px; opacity: 0; flex-shrink: 0; }
+    .msg-actions.show { animation: fadeIn 0.5s ease-out 1.1s forwards; }
+    .msg-actions.show.static { animation: none; opacity: 1; }
+
+    /* Bottom Floating Area with Pill */
+    .bottom-area {
+      padding: 20px;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      position: relative;
+    }
+
+    .input-pill {
+      background: rgba(255, 255, 255, 0.95);
+      border: 1px solid #e5e7eb;
+      border-radius: 30px;
+      padding: 6px 10px 6px 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      width: 220px;
+      max-width: 90%;
+      transition: width 0.35s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.35s;
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.03);
+      cursor: text;
+    }
+    .input-pill:hover, .input-pill:focus-within {
+      width: 40%;
+      box-shadow: 0 6px 24px rgba(0, 0, 0, 0.06);
+    }
+
+    .pill-btn {
+      background: transparent;
+      border: none;
+      color: #9ca3af;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 6px;
+      border-radius: 50%;
+      transition: color 0.15s;
+      flex-shrink: 0;
+    }
+    .pill-btn:hover { color: #4b5563; }
+
+    .input-pill input[type="text"] {
+      flex: 1;
+      border: none;
+      background: transparent;
+      outline: none;
+      font-size: 13px;
+      color: #1f2937;
+      min-width: 0;
+    }
+
+    .send-btn { background: #e5e7eb; color: #4b5563; }
+    .send-btn:hover { background: #d1d5db; color: #111827; }
+
+    /* Bottom-Left Drawer */
+    .history-toggle {
+      position: absolute;
+      bottom: 20px;
+      left: 24px;
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.95);
+      border: 1px solid #e5e7eb;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      color: #4b5563;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+      z-index: 20;
+    }
+
+    .history-drawer {
+      position: absolute;
+      bottom: 70px;
+      left: 24px;
+      width: 280px;
+      height: 380px;
+      background: rgba(255, 255, 255, 0.92);
+      border: 1px solid #e5e7eb;
+      border-radius: 16px;
+      padding: 14px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.08);
+      display: none;
+      flex-direction: column;
+      gap: 10px;
+      z-index: 30;
+    }
+    .history-drawer.active { display: flex; }
+
+    .search-input {
+      flex-shrink: 0;
+      width: 100%;
+      padding: 8px 12px;
+      border-radius: 8px;
+      border: 1px solid #e5e7eb;
+      background: #f9fafb;
+      font-size: 12px;
+      outline: none;
+    }
+    .history-list {
+      flex: 1;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .history-item {
+      flex-shrink: 0;
+      min-height: 34px;
+      line-height: 1.4;
+      padding: 9px 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      color: #4b5563;
+      cursor: pointer;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .history-item:hover { background: #f3f4f6; color: #111827; }
+
+    .attachment-preview {
+      display: none;
+      font-size: 11px;
+      background: #f3f4f6;
+      color: #4b5563;
+      padding: 2px 8px;
+      border-radius: 10px;
+      align-items: center;
+      gap: 4px;
+    }
+    .attachment-preview.active { display: flex; }
+  </style>
+</head>
+<body>
+
+  <div class="side-line left"></div>
+  <div class="side-line right"></div>
+  <div class="fade fade-top"></div>
+  <div class="fade fade-bottom"></div>
+
+  <div class="brand">QwenBot</div>
+
+  <!-- Settings Menu -->
+  <div class="top-controls">
+    <button class="settings-btn" id="settings-toggle">
+      <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 15a3 3 0 100-6 3 3 0 000 6z"></path><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"></path></svg>
+    </button>
+    <div class="settings-dropdown" id="settings-dropdown">
+      <div class="setting-group">
+        <div class="setting-label">AI</div>
+        <select id="provider-select">
+          <option value="llama">Llama 3.2 3B (local, cached, needs GPU)</option>
+          <option value="local">Small local model (offline, weak)</option>
+          <option value="grok">Grok / Groq (API key)</option>
+        </select>
+      </div>
+
+      <div id="grok-settings" style="display:none; flex-direction:column; gap:10px;">
+        <a href="https://console.groq.com/keys" target="_blank" rel="noopener noreferrer"
+          style="font-size:12px; color:#2563eb; text-decoration:underline; text-align:center;">Groq api key</a>
+        <input type="password" id="grok-key" placeholder="API key (xai-... for Grok, gsk_... for Groq)" autocomplete="off" spellcheck="false"
+          style="width:100%; padding:8px 10px; border-radius:8px; border:1px solid #d1d5db; font-size:12px; box-sizing:border-box;">
+        <input type="text" id="grok-model" placeholder="Model (blank = auto for your key)" spellcheck="false"
+          style="width:100%; padding:8px 10px; border-radius:8px; border:1px solid #d1d5db; font-size:12px; box-sizing:border-box;">
+        <button class="action-btn" id="grok-save-btn">Save & Cache Key</button>
+        <button class="action-btn" id="grok-upload-btn">Upload Key File</button>
+        <button class="action-btn" id="grok-clear-btn">Clear Saved Key</button>
+        <input type="file" id="grok-file" accept=".txt,.key,.json,text/plain" style="display:none">
+      </div>
+
+      <div class="setting-group" id="device-group">
+        <div class="setting-label">Run on</div>
+        <select id="device-select">
+          <option value="auto">Auto (WebGPU, falls back to CPU)</option>
+          <option value="cpu">CPU only (WASM)</option>
+        </select>
+      </div>
+
+      <div id="local-settings" style="display:flex; flex-direction:column; gap:12px;">
+      <div id="model-label" style="font-size:11px; color:#6b7280; text-align:center; margin-bottom:8px;"></div>
+
+      <button class="action-btn" id="load-model-btn">Download & Cache Model</button>
+      <button class="action-btn" id="import-folder-btn">Import Model Folder</button>
+      <button class="action-btn" id="export-model-btn">Export Cached Model to Folder</button>
+      <input type="file" id="folder-input" webkitdirectory directory multiple style="display:none">
+
+      <div class="progress-bar-container" id="progress-container">
+        <div class="progress-bar" id="progress-bar"></div>
+      </div>
+      </div>
+      <button class="action-btn" id="gpu-test-btn">Test GPU</button>
+      <div id="status-text" style="font-size:11px; color:#6b7280; text-align:center; white-space:pre-line; word-break:break-word;">Status: Idle</div>
+    </div>
+  </div>
+
+  <!-- Hero Content -->
+  <div class="hero-container" id="hero">
+    <div class="hero-logo">Qwen</div>
+    <div class="hero-text" id="dynamic-hero-text">Ready for action...</div>
+  </div>
+
+  <!-- Chat Area -->
+  <div class="chat-container" id="chat-container"></div>
+
+  <!-- Bottom Floating Pill Area -->
+  <div class="bottom-area">
+    <div class="input-pill">
+      <button class="pill-btn" id="attach-btn" title="Attach file">
+        <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"></path></svg>
+      </button>
+      <input type="file" id="file-input" style="display:none">
+      <div class="attachment-preview" id="attach-preview">
+        <span id="attach-name">file</span>
+        <span style="cursor:pointer" id="detach-btn">&times;</span>
+      </div>
+      <input type="text" id="user-input" placeholder="Ask Qwen..." autocomplete="off">
+      <button class="pill-btn send-btn" id="send-btn">
+        <svg width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"></path></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- History Menu -->
+  <button class="history-toggle" id="history-toggle">
+    <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"></path></svg>
+  </button>
+
+  <div class="history-drawer" id="history-drawer">
+    <input type="text" class="search-input" id="search-history" placeholder="Search chats...">
+    <div class="history-list" id="history-list"></div>
+    <button class="action-btn" id="new-chat-btn">+ New Chat</button>
+  </div>
+
+  <script type="module">
+    if (navigator.storage && navigator.storage.persist) {
+      navigator.storage.persist();
+    }
+
+    // The model runs in a Web Worker so loading/generating never blocks the page (no UI lag).
+    const WORKER_SRC = `
+import { pipeline, env, TextStreamer } from 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.5.1';
+env.useBrowserCache = true;
+env.allowLocalModels = true;
+let generator = null;
+function errText(e) { try { return (e && e.message) ? e.message : String(e); } catch (x) { return 'Unknown error'; } }
+self.addEventListener('unhandledrejection', (e) => { self.postMessage({ type: 'error', message: errText(e.reason) }); });
+self.onmessage = async (ev) => {
+  const d = ev.data;
+  try {
+    if (d.type === 'load') {
+      if (d.fileMap) {
+        env.customFetch = (url, opts) => {
+          const u = String(url);
+          for (const path in d.fileMap) { if (u.endsWith('/' + path)) return fetch(d.fileMap[path]); }
+          return fetch(url, opts);
+        };
+      }
+      generator = await pipeline('text-generation', d.model, {
+        device: d.device || 'webgpu', dtype: d.dtype,
+        progress_callback: (p) => self.postMessage({ type: 'progress', p })
+      });
+      self.postMessage({ type: 'ready' });
+    } else if (d.type === 'generate') {
+      const streamer = new TextStreamer(generator.tokenizer, {
+        skip_prompt: true, skip_special_tokens: true,
+        callback_function: (t) => self.postMessage({ type: 'token', t })
+      });
+      await generator(d.messages, { max_new_tokens: 2048, do_sample: true, temperature: 0.5, top_p: 0.9, repetition_penalty: 1.05, streamer });
+      self.postMessage({ type: 'done' });
+    }
+  } catch (e) { self.postMessage({ type: 'error', message: errText(e) }); }
+};
+`;
+    let worker = null, modelReady = false, workerHandler = null, rejectPending = null;
+    function getWorker() {
+      if (!worker) {
+        worker = new Worker(URL.createObjectURL(new Blob([WORKER_SRC], { type: 'text/javascript' })), { type: 'module' });
+        worker.onmessage = (e) => { if (workerHandler) workerHandler(e.data); };
+        worker.onerror = (e) => { const err = new Error(e.message || 'Worker failed to start'); err.workerFailed = true; if (rejectPending) rejectPending(err); };
+      }
+      return worker;
+    }
+    function workerLoad(model, dtype, fileMap, progress, device) {
+      return new Promise((resolve, reject) => {
+        const w = getWorker();
+        rejectPending = reject;
+        workerHandler = (d) => {
+          if (d.type === 'progress') { if (progress) progress(d.p); }
+          else if (d.type === 'ready') { modelReady = true; rejectPending = null; resolve(); }
+          else if (d.type === 'error') { rejectPending = null; reject(new Error(d.message)); }
+        };
+        w.postMessage({ type: 'load', model, dtype, fileMap, device });
+      });
+    }
+    // Fallback: if the Worker can't start in this setup, run the model on the page itself (works, just less smooth)
+    let useMain = false, tf = null, mainGenerator = null;
+    async function mainLoad(model, dtype, fileMap, progress, device) {
+      tf = tf || await import('https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.5.1');
+      tf.env.useBrowserCache = true;
+      tf.env.allowLocalModels = true;
+      if (fileMap) {
+        tf.env.customFetch = (url, opts) => {
+          const u = String(url);
+          for (const path in fileMap) { if (u.endsWith('/' + path)) return fetch(fileMap[path]); }
+          return fetch(url, opts);
+        };
+      }
+      mainGenerator = await tf.pipeline('text-generation', model, { device: device || 'webgpu', dtype, progress_callback: progress });
+      modelReady = true;
+    }
+    async function mainGenerate(messages, onToken) {
+      const streamer = new tf.TextStreamer(mainGenerator.tokenizer, { skip_prompt: true, skip_special_tokens: true, callback_function: onToken });
+      await mainGenerator(messages, { max_new_tokens: 2048, do_sample: true, temperature: 0.5, top_p: 0.9, repetition_penalty: 1.05, streamer });
+    }
+    function workerGenerate(messages, onToken) {
+      return new Promise((resolve, reject) => {
+        rejectPending = reject;
+        workerHandler = (d) => {
+          if (d.type === 'token') onToken(d.t);
+          else if (d.type === 'done') { rejectPending = null; resolve(); }
+          else if (d.type === 'error') { rejectPending = null; reject(new Error(d.message)); }
+        };
+        getWorker().postMessage({ type: 'generate', messages });
+      });
+    }
+    let attachedFile = null;
+    let currentChatId = Date.now().toString();
+    let chats = {};
+    try { chats = JSON.parse(localStorage.getItem('qwen_chats') || '{}') || {}; } catch (e) { chats = {}; }
+    function saveChats() {
+      try { localStorage.setItem('qwen_chats', JSON.stringify(chats)); } catch (e) { console.warn('Could not save chats:', e); }
+    }
+    // Every saved message keeps its text, time, and each code block (language + code) separately
+    function extractCode(raw) {
+      const parts = raw.split('```');
+      const out = [];
+      for (let i = 1; i < parts.length; i += 2) {
+        if (i === parts.length - 1) break; // unclosed block
+        const { lang, code } = splitCode(parts[i]);
+        out.push({ lang, code });
+      }
+      return out;
+    }
+    function saveMessage(role, content) {
+      const chat = chats[currentChatId];
+      const msg = { role, content, time: Date.now() };
+      if (role === 'assistant') { const code = extractCode(content); if (code.length) msg.code = code; }
+      chat.messages.push(msg);
+      chat.updated = Date.now();
+      saveChats();
+    }
+
+    const phrases = ["Ready for action...", "What shall we code today?", "Standing by..."];
+    document.getElementById('dynamic-hero-text').innerText = phrases[Math.floor(Math.random() * phrases.length)];
+
+    const settingsToggle = document.getElementById('settings-toggle');
+    const settingsDropdown = document.getElementById('settings-dropdown');
+    const historyToggle = document.getElementById('history-toggle');
+    const historyDrawer = document.getElementById('history-drawer');
+    const loadModelBtn = document.getElementById('load-model-btn');
+    const importFolderBtn = document.getElementById('import-folder-btn');
+    const folderInput = document.getElementById('folder-input');
+    const statusText = document.getElementById('status-text');
+    const progressContainer = document.getElementById('progress-container');
+    const progressBar = document.getElementById('progress-bar');
+    const hero = document.getElementById('hero');
+    const chatContainer = document.getElementById('chat-container');
+    const userInput = document.getElementById('user-input');
+    const sendBtn = document.getElementById('send-btn');
+    const attachBtn = document.getElementById('attach-btn');
+    const fileInput = document.getElementById('file-input');
+    const attachPreview = document.getElementById('attach-preview');
+    const attachName = document.getElementById('attach-name');
+    const detachBtn = document.getElementById('detach-btn');
+    const historyList = document.getElementById('history-list');
+    const searchHistory = document.getElementById('search-history');
+    const newChatBtn = document.getElementById('new-chat-btn');
+
+    settingsToggle.onclick = () => settingsDropdown.classList.toggle('active');
+
+    // ---------- AI provider: local in-browser models (WebGPU, with automatic CPU fallback) ----------
+    const providerSelect = document.getElementById('provider-select');
+    const deviceSelect = document.getElementById('device-select');
+    let provider = localStorage.getItem('qwen_provider');
+    if (provider !== 'llama' && provider !== 'local' && provider !== 'grok') provider = 'llama'; // default: Llama
+
+    // ---------- Grok (xAI API): key + model cached in localStorage ----------
+    const grokKeyInput = document.getElementById('grok-key');
+    const grokModelInput = document.getElementById('grok-model');
+    let grokKey = localStorage.getItem('qwen_grok_key') || '';
+    let grokModel = localStorage.getItem('qwen_grok_model') || '';
+    function grokProvider(key) { return (key || '').startsWith('gsk_') ? 'groq' : 'xai'; }
+    function grokDefaultModel(key) { return grokProvider(key) === 'groq' ? 'llama-3.3-70b-versatile' : 'grok-4'; }
+    function grokPlaceholder() { return grokProvider(grokKey) === 'xai' ? 'Model (blank = auto-pick best Grok)' : 'Model (blank = auto-pick best Groq model)'; }
+    let grokResolved = '';
+    // Asks xAI which models this key can use and picks the newest top-tier Grok (cached 24h)
+    async function grokAutoModel() {
+      const isGroq = grokProvider(grokKey) === 'groq';
+      const tag = grokKey.slice(-8);
+      try {
+        const c = JSON.parse(localStorage.getItem('qwen_grok_auto') || 'null');
+        if (c && c.tag === tag && c.model && Date.now() - c.t < 86400000) return c.model;
+      } catch (e) {}
+      let best = isGroq ? 'llama-3.1-8b-instant' : 'grok-4';
+      try {
+        const r = await fetch(isGroq ? 'https://api.groq.com/openai/v1/models' : 'https://api.x.ai/v1/models', { headers: { 'Authorization': 'Bearer ' + grokKey } });
+        if (r.ok && isGroq) {
+          const j = await r.json();
+          const badG = /whisper|tts|playai|guard|embed|prompt-guard|safeguard|distil-whisper|orpheus|allam|compound/i;
+          const ids = (j.data || []).filter(m => m.active !== false && !badG.test(m.id)).map(m => m.id);
+          const pref = ['llama-3.3-70b-versatile', 'openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'meta-llama/llama-4-maverick-17b-128e-instruct', 'qwen/qwen3-32b', 'llama-3.1-8b-instant'];
+          const hit = pref.find(x => ids.includes(x));
+          if (hit) best = hit;
+          else if (ids.length) {
+            ids.sort((a, b) => (parseFloat((b.match(/(\d+(?:\.\d+)?)b/i) || [0, 0])[1]) || 0) - (parseFloat((a.match(/(\d+(?:\.\d+)?)b/i) || [0, 0])[1]) || 0));
+            best = ids[0];
+          }
+        } else if (r.ok) {
+          const j = await r.json();
+          const bad = /image|imagine|vision|video|embed|mini|fast|code|beta|multi-agent|non-reasoning|audio|tts|stt/i;
+          const cand = (j.data || []).filter(m => /^grok-\d/.test(m.id) && !bad.test(m.id))
+            .map(m => ({ id: m.id, v: parseFloat((m.id.match(/^grok-(\d+(?:\.\d+)?)/) || [0, 0])[1]), created: m.created || 0 }));
+          cand.sort((a, b) => b.v - a.v || b.created - a.created);
+          if (cand.length) best = cand[0].id;
+        }
+      } catch (e) {}
+      try { localStorage.setItem('qwen_grok_auto', JSON.stringify({ tag, model: best, t: Date.now() })); } catch (e) {}
+      return best;
+    }
+    async function resolveGrokModel() {
+      const stale = grokProvider(grokKey) === 'groq' && /^grok/i.test(grokModel);
+      if (!grokModel || stale) grokResolved = await grokAutoModel();
+      else grokResolved = grokModel;
+      updateGrokLabel();
+      return grokResolved;
+    }
+    function grokEffectiveModel() {
+      // a leftover xAI model name (grok-*) is invalid on Groq, so fall back to the Groq default
+      if (grokProvider(grokKey) === 'groq' && /^grok/i.test(grokModel)) return grokDefaultModel(grokKey);
+      return grokModel || grokDefaultModel(grokKey);
+    }
+    if (grokProvider(grokKey) === 'groq' && /^grok/i.test(grokModel)) { grokModel = ''; try { localStorage.removeItem('qwen_grok_model'); } catch (e) {} }
+    grokKeyInput.value = grokKey;
+    grokModelInput.value = grokModel;
+    grokModelInput.placeholder = grokPlaceholder();
+    function saveGrok() {
+      grokKey = grokKeyInput.value.trim();
+      grokModel = grokModelInput.value.trim();
+      try {
+        localStorage.setItem('qwen_grok_key', grokKey);
+        localStorage.setItem('qwen_grok_model', grokModel);
+      } catch (e) {}
+      grokModelInput.placeholder = grokPlaceholder();
+      statusText.innerText = grokKey ? ('Key saved and cached (' + (grokProvider(grokKey) === 'groq' ? 'Groq' : 'xAI Grok') + ').') : 'No key saved.';
+      updateGrokLabel();
+    }
+    function updateGrokLabel() {
+      if (provider === 'grok') document.getElementById('model-label').innerText = (grokResolved || grokEffectiveModel()) + ' (' + (grokProvider(grokKey) === 'groq' ? 'Groq' : 'xAI') + ' API)' + (grokKey ? '' : ' - add a key');
+    }
+    document.getElementById('grok-save-btn').onclick = saveGrok;
+    grokKeyInput.addEventListener('change', saveGrok);
+    grokModelInput.addEventListener('change', saveGrok);
+    document.getElementById('grok-upload-btn').onclick = () => document.getElementById('grok-file').click();
+    document.getElementById('grok-file').onchange = async (e) => {
+      const f = e.target.files && e.target.files[0];
+      if (!f) return;
+      const txt = await f.text();
+      const m = txt.match(/(?:xai-|gsk_)[A-Za-z0-9_\-]+/);
+      grokKeyInput.value = (m ? m[0] : txt.trim().split(/\s+/)[0] || '');
+      e.target.value = '';
+      saveGrok();
+    };
+    document.getElementById('grok-clear-btn').onclick = () => {
+      grokKeyInput.value = '';
+      try { localStorage.removeItem('qwen_grok_key'); } catch (e) {}
+      saveGrok();
+    };
+    async function grokGenerate(messages, onTok) {
+      if (!grokKey) throw new Error('No API key. Add one in Settings.');
+      const url = grokProvider(grokKey) === 'groq' ? 'https://api.groq.com/openai/v1/chat/completions' : 'https://api.x.ai/v1/chat/completions';
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + grokKey },
+        body: JSON.stringify({ model: await resolveGrokModel(), messages, stream: true })
+      });
+      if (!res.ok) {
+        if (res.status === 404) { try { localStorage.removeItem('qwen_grok_auto'); } catch (e) {} }
+        let detail = '';
+        try { detail = (await res.text()).slice(0, 300); } catch (e) {}
+        throw new Error('API error ' + res.status + (detail ? ': ' + detail : ''));
+      }
+      const reader = res.body.getReader();
+      const dec = new TextDecoder();
+      let buf = '';
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        let nl;
+        while ((nl = buf.indexOf('\n')) >= 0) {
+          const line = buf.slice(0, nl).trim();
+          buf = buf.slice(nl + 1);
+          if (!line.startsWith('data:')) continue;
+          const data = line.slice(5).trim();
+          if (data === '[DONE]') return;
+          try {
+            const j = JSON.parse(data);
+            const t = j.choices && j.choices[0] && j.choices[0].delta && j.choices[0].delta.content;
+            if (t) onTok(t);
+          } catch (e) {}
+        }
+      }
+    }
+    let deviceMode = localStorage.getItem('qwen_device') === 'cpu' ? 'cpu' : 'auto';
+    deviceSelect.value = deviceMode;
+    // true when we should try WebGPU first
+    let forceCpu = false; // set when WebGPU fails mid-chat, so reloads go straight to CPU
+    function gpuAllowed() { return !!navigator.gpu && deviceMode !== 'cpu' && !forceCpu; }
+
+    function applyProvider() {
+      providerSelect.value = provider;
+      const g = provider === 'grok';
+      document.getElementById('grok-settings').style.display = g ? 'flex' : 'none';
+      document.getElementById('local-settings').style.display = g ? 'none' : 'flex';
+      document.getElementById('device-group').style.display = g ? 'none' : '';
+      document.getElementById('gpu-test-btn').style.display = g ? 'none' : '';
+      if (g) { updateGrokLabel(); statusText.innerText = grokKey ? 'Status: API ready' : 'Status: Add your API key'; }
+      else if (!modelReady) statusText.innerText = 'Status: Idle';
+    }
+    providerSelect.onchange = () => {
+      provider = providerSelect.value;
+      localStorage.setItem('qwen_provider', provider);
+      setModel(provider === 'llama' ? llamaIdx : pickLocalIdx());
+      applyProvider();
+      if (provider !== 'grok' && !modelMatchesProvider()) autoLoadIfCached();
+    };
+    deviceSelect.onchange = () => {
+      deviceMode = deviceSelect.value;
+      forceCpu = false;
+      localStorage.setItem('qwen_device', deviceMode);
+      modelReady = false; // force a reload on the new device
+      if (worker) { worker.terminate(); worker = null; }
+      setModel(provider === 'llama' ? llamaIdx : pickLocalIdx());
+      statusText.innerText = 'Device changed. Click Download & Cache Model to load it.';
+      autoLoadIfCached();
+    };
+    // Shows exactly what the browser answers to a GPU request, on the page and inside a worker
+    document.getElementById('gpu-test-btn').onclick = async () => {
+      const lines = [];
+      const show = () => { statusText.innerText = lines.join('\n'); };
+      lines.push('Secure context: ' + window.isSecureContext + ' (' + location.protocol + ')');
+      lines.push('navigator.gpu: ' + (navigator.gpu ? 'yes' : 'NO'));
+      show();
+      if (navigator.gpu) {
+        for (const o of [{}, { powerPreference: 'high-performance' }]) {
+          try {
+            const a = await navigator.gpu.requestAdapter(o);
+            lines.push('Page ' + JSON.stringify(o) + ': ' + (a ? 'OK ' + ((a.info && (a.info.description || a.info.vendor)) || '') + ' f16=' + a.features.has('shader-f16') : 'null'));
+          } catch (e) { lines.push('Page ' + JSON.stringify(o) + ': error ' + e.message); }
+          show();
+        }
+        try {
+          const src = "self.onmessage=async()=>{try{if(!navigator.gpu){postMessage('no navigator.gpu in worker');return;}const a=await navigator.gpu.requestAdapter();postMessage(a?'OK '+((a.info&&(a.info.description||a.info.vendor))||''):'null');}catch(e){postMessage('error '+e.message);}};";
+          const w = new Worker(URL.createObjectURL(new Blob([src], { type: 'text/javascript' })));
+          const r = await new Promise((res) => { w.onmessage = (ev) => res(ev.data); w.onerror = () => res('worker failed to start'); setTimeout(() => res('timeout'), 5000); w.postMessage(1); });
+          w.terminate();
+          lines.push('Worker: ' + r);
+        } catch (e) { lines.push('Worker: error ' + e.message); }
+        show();
+      }
+    };
+
+    const CHAT_SYSTEM = 'You are QwenBot, a warm, quick-witted assistant. Talk like a smart, friendly person: natural, conversational and curious, with a little humor when it fits. Match the mood and energy of the user, keep casual replies short, and never sound robotic, preachy or corporate. Ask a brief follow-up question only when it really helps. When the user asks for code, write complete, correct, working code inside a fenced code block with the language name right after the three backticks, with at most a couple of short sentences before or after it. If the user asks you to draw or show something visual in HTML (a circle, an animation, a page), give ONE complete self-contained HTML file with inline CSS and JS that actually renders it correctly when opened. Never put normal chat in a code block. You may use **bold** for key words, *italic* for light emphasis, and ==highlight== for the single most important phrase, but sparingly. Never use headers or markdown bullet syntax. Fenced code blocks are for code only.';
+
+    historyToggle.onclick = () => historyDrawer.classList.toggle('active');
+
+    // If a model crashes WebGPU, the next reload automatically tries the next (smaller / lighter-on-GPU) one.
+    const MODELS = [
+      { id: 'onnx-community/Qwen2.5-1.5B-Instruct', name: 'Qwen2.5-1.5B-Instruct', dtype: 'q4f16' },
+      { id: 'onnx-community/Qwen2.5-1.5B-Instruct', name: 'Qwen2.5-1.5B-Instruct', dtype: 'q4' },
+      { id: 'onnx-community/Qwen2.5-0.5B-Instruct', name: 'Qwen2.5-0.5B-Instruct', dtype: 'q4' },
+      { id: 'onnx-community/SmolLM2-1.7B-Instruct', name: 'SmolLM2-1.7B-Instruct', dtype: 'q4' },
+      { id: 'onnx-community/Llama-3.2-3B-Instruct', name: 'Llama-3.2-3B-Instruct', dtype: 'q4f16' }
+    ];
+    const llamaIdx = MODELS.findIndex(m => m.id.includes('Llama-3.2-3B'));
+    // The small local model never picks Llama; Llama is only used when chosen in Settings
+    function pickLocalIdx() {
+      const i = MODELS.findIndex((m, k) => k !== llamaIdx && !failedModels.includes(k));
+      return i < 0 ? llamaIdx - 1 : i;
+    }
+    let loadedIdx = -1;
+    function modelMatchesProvider() { if (provider === 'grok') return !!grokKey; return modelReady && (loadedIdx === llamaIdx) === (provider === 'llama'); }
+    // Entries that genuinely crashed on this machine (the two Qwen 1.5B tries crashed earlier) are skipped.
+    let failedModels = JSON.parse(localStorage.getItem('model_failed') || 'null');
+    if (!Array.isArray(failedModels)) { failedModels = [0, 1]; localStorage.setItem('model_failed', JSON.stringify(failedModels)); }
+    let modelIdx = pickLocalIdx();
+    let MODEL_ID = MODELS[modelIdx].id;
+    function setModel(i) {
+      modelIdx = i;
+      MODEL_ID = MODELS[i].id;
+      document.getElementById('model-label').innerText = MODELS[i].name + ' (' + MODELS[i].dtype + ', ' + (gpuAllowed() ? 'WebGPU' : 'CPU') + ')';
+    }
+    setModel(modelIdx);
+
+    // NOTE: no kv_cache_dtype here. Forcing the KV cache to a quantized type is what made the model spit out garbage.
+    // WebGPU. Picks q4f16 when the GPU supports 16-bit shaders (faster/smaller), otherwise plain q4.
+    let gpuInfo = '';
+    let activeDevice = '';
+    // Tries a few ways of asking for a GPU before giving up (some setups only answer one of them)
+    async function getGpuAdapter() {
+      if (!navigator.gpu) return null;
+      const tries = [{ powerPreference: 'high-performance' }, {}];
+      for (const o of tries) { try { const a = await navigator.gpu.requestAdapter(o); if (a) return a; } catch (e) {} }
+      return null;
+    }
+    const cpuModelIdx = MODELS.findIndex(m => m.id.includes('0.5B'));
+    async function loadModel(progress_callback, fileMap) {
+      // The adapter check is only used for info and to pick q4f16 vs q4. Even if it comes back empty we still let the
+      // runtime try WebGPU itself (that is what the simple version of this page did), and only then fall back to CPU.
+      const adapter = await getGpuAdapter();
+      if (provider === 'llama') setModel(llamaIdx);
+      else if (modelIdx === llamaIdx) setModel(pickLocalIdx());
+      modelReady = false;
+
+      // Order: WebGPU in a worker -> WebGPU on the main thread -> CPU (WASM). Any failure drops down to the next.
+      let attempts = [];
+      if (gpuAllowed()) { attempts.push({ device: 'webgpu', main: false }); attempts.push({ device: 'webgpu', main: true }); }
+      attempts.push({ device: 'wasm', main: false });
+
+      let lastErr = null;
+      for (let n = 0; n < attempts.length; n++) {
+        const at = attempts[n];
+        // On CPU the small local model uses the light 0.5B build; Llama stays Llama (slow, but it works)
+        if (at.device === 'wasm' && provider !== 'llama') setModel(cpuModelIdx);
+        const m = MODELS[modelIdx];
+        let dtype = at.device === 'wasm' ? 'q4' : m.dtype;
+        if (at.device === 'webgpu' && adapter && m.dtype === 'q4f16' && !adapter.features.has('shader-f16')) dtype = 'q4';
+        if (at.device === 'webgpu') {
+          gpuInfo = adapter
+            ? 'GPU: ' + ((adapter.info && (adapter.info.description || adapter.info.device || adapter.info.vendor)) || 'unknown') +
+              ' | maxBuffer ' + Math.round(adapter.limits.maxBufferSize / 1048576) + 'MB | maxBinding ' +
+              Math.round(adapter.limits.maxStorageBufferBindingSize / 1048576) + 'MB | f16 ' + adapter.features.has('shader-f16')
+            : 'WebGPU pre-check found no adapter, letting the runtime try anyway';
+        } else {
+          gpuInfo = deviceMode === 'cpu' ? 'CPU mode' : 'No usable WebGPU, running on CPU';
+        }
+        console.log(gpuInfo, at);
+        statusText.innerText = 'Loading ' + m.name + ' (' + dtype + ', ' + (at.device === 'wasm' ? 'CPU' : 'WebGPU') + ')...';
+        try {
+          if (at.main) {
+            if (worker) { worker.terminate(); worker = null; }
+            useMain = true;
+            await mainLoad(MODEL_ID, dtype, fileMap, progress_callback, at.device);
+          } else {
+            useMain = false;
+            try {
+              await workerLoad(MODEL_ID, dtype, fileMap, progress_callback, at.device);
+            } catch (we) {
+              if (!we.workerFailed) throw we;
+              console.warn('Worker unavailable, running on the main thread:', we);
+              if (worker) { worker.terminate(); worker = null; }
+              useMain = true;
+              await mainLoad(MODEL_ID, dtype, fileMap, progress_callback, at.device);
+            }
+          }
+          loadedIdx = modelIdx;
+          activeDevice = at.device;
+          document.getElementById('model-label').innerText = m.name + ' (' + dtype + ', ' + (at.device === 'wasm' ? 'CPU' : 'WebGPU') + ')';
+          return;
+        } catch (e) {
+          lastErr = e;
+          if (worker) { worker.terminate(); worker = null; }
+          modelReady = false;
+          const msg = String((e && e.message) || e);
+          if (/abort|assertion/i.test(msg) && at.device === 'webgpu') {
+            // a real GPU crash: remember it (small model only) and skip straight to CPU
+            if (provider !== 'llama' && !failedModels.includes(modelIdx)) { failedModels.push(modelIdx); localStorage.setItem('model_failed', JSON.stringify(failedModels)); }
+            statusText.innerText = 'WebGPU crashed, falling back to CPU...';
+            n = attempts.findIndex(x => x.device === 'wasm') - 1;
+            continue;
+          }
+          console.warn('Load attempt failed, trying the next way:', at, e);
+        }
+      }
+      throw lastErr;
+    }
+
+    function friendlyError(err) {
+      const m = (err && err.message) ? err.message : String(err);
+      if (/abort|assertion/i.test(m)) {
+        return 'Model crashed while loading (' + MODELS[modelIdx].name + '). Try setting Run on to CPU only, or reload the page. ' + gpuInfo;
+      }
+      return m;
+    }
+
+    let downloadTracker = {};
+
+    // Standard Download & Cache Button
+    loadModelBtn.onclick = async () => {
+      loadModelBtn.disabled = true;
+      statusText.innerText = "Checking cache & loading...";
+      progressContainer.style.display = 'block';
+      progressBar.style.width = '0%';
+      downloadTracker = {};
+
+      try {
+        await loadModel((p) => {
+            if (p.status === 'progress') {
+              downloadTracker[p.file] = { loaded: p.loaded, total: p.total };
+              let totalLoaded = 0;
+              let totalSize = 0;
+
+              for (let f in downloadTracker) {
+                totalLoaded += downloadTracker[f].loaded;
+                totalSize += downloadTracker[f].total;
+              }
+
+              let pct = totalSize > 0 ? ((totalLoaded / totalSize) * 100).toFixed(1) : 0;
+              let loadedMB = (totalLoaded / (1024 * 1024)).toFixed(1);
+              let totalMB = (totalSize / (1024 * 1024)).toFixed(1);
+
+              progressBar.style.width = pct + '%';
+              statusText.innerText = `Caching: ${loadedMB}MB / ${totalMB}MB (${pct}%)`;
+            } else if (p.status === 'ready') {
+              progressBar.style.width = '100%';
+              statusText.innerText = "Cached & Ready!";
+            }
+        });
+
+        progressBar.style.width = '100%';
+        statusText.innerText = "Qwen AI Ready & Cached";
+        loadModelBtn.disabled = false;
+      } catch (err) {
+        statusText.innerText = "Error: " + friendlyError(err);
+        loadModelBtn.disabled = false;
+      }
+    };
+
+    // Import Local Folder Button
+    importFolderBtn.onclick = () => folderInput.click();
+
+    folderInput.onchange = async (e) => {
+      const files = Array.from(e.target.files);
+      if (files.length === 0) return;
+
+      statusText.innerText = `Reading ${files.length} folder files...`;
+      progressContainer.style.display = 'block';
+      progressBar.style.width = '50%';
+
+      try {
+        // Create custom local blob URL mappings for local ONNX files
+        const fileMap = {};
+        for (const file of files) {
+          const path = file.webkitRelativePath.split('/').slice(1).join('/');
+          const blobUrl = URL.createObjectURL(file);
+          fileMap[path] = blobUrl;
+          if (!(file.name in fileMap)) fileMap[file.name] = blobUrl;
+        }
+
+        await loadModel(undefined, fileMap);
+
+        progressBar.style.width = '100%';
+        statusText.innerText = "Loaded from Local Folder!";
+      } catch (err) {
+        statusText.innerText = "Folder Load Error: " + friendlyError(err);
+      }
+    };
+
+    // Saves the cached model files to a folder on disk so another browser can load them with "Import Model Folder"
+    document.getElementById('export-model-btn').onclick = async () => {
+      try {
+        if (!window.caches) throw new Error('This browser has no cache to export from.');
+        const idx = loadedIdx >= 0 ? loadedIdx : modelIdx;
+        const want = '/' + MODELS[idx].id + '/';
+        const found = [];
+        for (const name of await caches.keys()) {
+          const c = await caches.open(name);
+          for (const r of await c.keys()) if (r.url.includes(want)) found.push({ c, r });
+        }
+        if (!found.length) throw new Error('Nothing cached for ' + MODELS[idx].name + ' yet. Load the model first.');
+        let root = null;
+        if (window.showDirectoryPicker) {
+          statusText.innerText = 'Pick an empty folder to save the model into...';
+          root = await window.showDirectoryPicker({ mode: 'readwrite' });
+        }
+        let n = 0;
+        for (const { c, r } of found) {
+          n++;
+          statusText.innerText = 'Saving file ' + n + ' of ' + found.length + '...';
+          const resp = await c.match(r);
+          const tail = r.url.split('?')[0];
+          const rel = tail.includes('/resolve/') ? tail.split('/resolve/')[1].split('/').slice(1).join('/') : tail.split('/').pop();
+          const parts = rel.split('/');
+          if (root) {
+            let d = root;
+            for (const seg of parts.slice(0, -1)) d = await d.getDirectoryHandle(seg, { create: true });
+            const fh = await d.getFileHandle(parts[parts.length - 1], { create: true });
+            await resp.body.pipeTo(await fh.createWritable());
+          } else {
+            const blob = await resp.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = parts[parts.length - 1];
+            document.body.appendChild(a); a.click(); a.remove();
+            await new Promise(res => setTimeout(res, 1500));
+            setTimeout(() => URL.revokeObjectURL(url), 60000);
+          }
+        }
+        statusText.innerText = root
+          ? 'Saved ' + found.length + ' files. In the other browser use Import Model Folder and pick that folder.'
+          : 'Saved ' + found.length + ' files to your Downloads. Put them in one new folder, then use Import Model Folder in the other browser.';
+      } catch (err) {
+        statusText.innerText = 'Export: ' + ((err && err.message) || err);
+      }
+    };
+
+    attachBtn.onclick = () => fileInput.click();
+    fileInput.onchange = (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          attachedFile = { name: file.name, content: event.target.result };
+          attachName.innerText = file.name;
+          attachPreview.classList.add('active');
+        };
+        reader.readAsText(file);
+      }
+    };
+    detachBtn.onclick = () => {
+      attachedFile = null;
+      attachPreview.classList.remove('active');
+    };
+
+    function renderHistory() {
+      historyList.innerHTML = '';
+      const filter = searchHistory.value.toLowerCase();
+      Object.keys(chats).sort((a, b) => ((chats[b].updated || +b) - (chats[a].updated || +a))).forEach(id => {
+        const chat = chats[id];
+        if (chat.title && chat.title.toLowerCase().includes(filter)) {
+          const item = document.createElement('div');
+          item.className = 'history-item';
+          item.innerText = chat.title;
+          item.onclick = () => loadChat(id);
+          historyList.appendChild(item);
+        }
+      });
+    }
+
+    function loadChat(id) {
+      currentChatId = id;
+      historyDrawer.classList.remove('active');
+      stickToBottom = true;
+      chatContainer.innerHTML = '';
+      const chat = chats[id];
+      if (chat && chat.messages && chat.messages.length > 0) {
+        hero.style.display = 'none';
+        chatContainer.classList.add('active');
+        chat.messages.forEach(m => appendMsg(m.role, m.content));
+      } else {
+        hero.style.display = 'flex';
+        chatContainer.classList.remove('active');
+      }
+    }
+
+    newChatBtn.onclick = () => {
+      currentChatId = Date.now().toString();
+      hero.style.display = 'flex';
+      chatContainer.classList.remove('active');
+      chatContainer.innerHTML = '';
+      historyDrawer.classList.remove('active');
+    };
+
+    searchHistory.oninput = renderHistory;
+
+    async function handleSend() {
+      let text = userInput.value.trim();
+      if (!text && !attachedFile) return;
+
+      if (attachedFile) {
+        text += `\n\n[Attached File: ${attachedFile.name}]\n${attachedFile.content}`;
+        attachedFile = null;
+        attachPreview.classList.remove('active');
+      }
+
+      userInput.value = '';
+      hero.style.display = 'none';
+      chatContainer.classList.add('active');
+
+      if (!chats[currentChatId]) {
+        chats[currentChatId] = { title: text.replace(/\s+/g, ' ').slice(0, 40), created: Date.now(), updated: Date.now(), messages: [] };
+      }
+
+      appendMsg('user', text);
+      saveMessage('user', text);
+      renderHistory();
+
+      const aiDiv = appendMsg('assistant', '');
+
+      if (!modelMatchesProvider()) {
+        aiDiv.innerText = provider === 'grok' ? "Please add your API key in Settings first." : "Please click 'Import Model Folder' or 'Download & Cache Model' in Settings first.";
+        return;
+      }
+
+      // Smooth reveal: tokens go into a buffer, and a few characters are shown per animation frame
+      const renderer = createStreamRenderer(aiDiv);
+      let raw = '', shown = 0, generating = true, rafPending = false, resolveDrain;
+      const drained = new Promise((r) => { resolveDrain = r; });
+      function pump() {
+        rafPending = false;
+        const backlog = raw.length - shown;
+        if (backlog > 0) {
+          shown += Math.max(1, Math.ceil(backlog / 10));
+          renderer.update(raw.slice(0, shown), false);
+          if (stickToBottom) chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+        if (shown < raw.length) { rafPending = true; requestAnimationFrame(pump); }
+        else if (!generating) resolveDrain();
+      }
+      function kick() { if (!rafPending) { rafPending = true; requestAnimationFrame(pump); } }
+
+      // First token should arrive quickly on a working GPU; if it never does, treat WebGPU as dead
+      async function generateOnce() {
+        let timer = null, gotFirst = false;
+        const onTok = (t) => { if (!gotFirst) { gotFirst = true; clearTimeout(timer); } raw += t; kick(); };
+        if (provider !== 'grok' && activeDevice === 'webgpu') {
+          timer = setTimeout(() => {
+            if (gotFirst) return;
+            const err = new Error('WebGPU timeout: no output after 90s');
+            if (rejectPending) rejectPending(err);
+            if (worker) { worker.terminate(); worker = null; }
+          }, 90000);
+        }
+        try {
+          if (provider === 'grok') await grokGenerate(convo, onTok);
+          else if (useMain) await mainGenerate(convo, onTok);
+          else await workerGenerate(convo, onTok);
+        } finally { clearTimeout(timer); }
+      }
+      let convo;
+      try {
+        convo = [
+          { role: 'system', content: 'You are a friendly assistant. Reply to greetings and normal questions in short plain sentences, never in a code block. Only use a code block (with the language name after the three backticks) when the user asks you to write programming code. Never explain markdown unless asked.' },
+          ...chats[currentChatId].messages.slice(-12).map(m => ({ role: m.role, content: m.content }))
+        ];
+
+        if (provider !== 'local') convo[0] = { role: 'system', content: CHAT_SYSTEM };
+        try {
+          await generateOnce();
+        } catch (ge) {
+          const gm = String((ge && ge.message) || ge);
+          const gpuFail = provider !== 'grok' && activeDevice === 'webgpu' && !raw.trim() &&
+            /abort|assert|device|lost|gpu|timeout|memory|buffer|map|webgpu|worker|shader|dispatch|compute/i.test(gm);
+          if (!gpuFail) throw ge;
+          console.warn('WebGPU failed while generating, retrying on CPU:', ge);
+          if (provider !== 'llama' && !failedModels.includes(modelIdx)) { failedModels.push(modelIdx); localStorage.setItem('model_failed', JSON.stringify(failedModels)); }
+          forceCpu = true;
+          if (worker) { worker.terminate(); worker = null; }
+          modelReady = false;
+          aiDiv.innerText = 'WebGPU failed, switching to CPU (first reply will be slower)...';
+          await loadModel(() => {});
+          aiDiv.innerText = '';
+          await generateOnce();
+        }
+        generating = false;
+        kick();
+        await drained;
+        renderer.update(raw, true);
+        aiDiv.classList.add('done');
+        addCopyBar(aiDiv, raw, false);
+        if (stickToBottom) chatContainer.scrollTop = chatContainer.scrollHeight;
+
+        saveMessage('assistant', raw);
+      } catch (e) {
+        generating = false;
+        if (raw.trim()) saveMessage('assistant', raw); // keep whatever was written before the error
+        aiDiv.innerText = "Execution Error: " + friendlyError(e);
+      }
+    }
+
+    const COPY_ICON = '<svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15V6a2 2 0 012-2h9"></path></svg>';
+    const CHECK_ICON = '<svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"></path></svg>';
+    const DOWNLOAD_ICON = '<svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M12 4v10M7.5 10L12 14.5 16.5 10M5 20h14"></path></svg>';
+    const EXTENSIONS = { html: 'html', css: 'css', javascript: 'js', js: 'js', typescript: 'ts', ts: 'ts', python: 'py', py: 'py', json: 'json', bash: 'sh', shell: 'sh', sh: 'sh', markdown: 'md', md: 'md', java: 'java', c: 'c', cpp: 'cpp', csharp: 'cs', go: 'go', rust: 'rs', php: 'php', ruby: 'rb', sql: 'sql', xml: 'xml', yaml: 'yml' };
+
+
+    // ---------- Syntax highlighting ----------
+    const HL = {
+      ctrl: new Set('if else elif for while do switch case default break continue return try except catch finally throw throws raise yield await async with match goto'.split(' ')),
+      bashCtrl: new Set('then fi esac done'.split(' ')),
+      decl: new Set('def class function let const var import from export as new fn struct enum interface impl trait package namespace using public private protected static final abstract extends implements lambda del global nonlocal module require typedef extern func type'.split(' ')),
+      logic: new Set('and or not xor in is instanceof typeof'.split(' ')),
+      consts: new Set('True False None true false null undefined nil NaN Infinity NULL'.split(' ')),
+      types: new Set('int float double char str string bool boolean void long short byte list dict set tuple number object any'.split(' '))
+    };
+
+    function hlSpan(parent, text, cls) {
+      if (!text) return;
+      if (!cls) { parent.appendChild(document.createTextNode(text)); return; }
+      const sp = document.createElement('span');
+      sp.className = 'tk-' + cls;
+      sp.textContent = text;
+      parent.appendChild(sp);
+    }
+
+    function tokenizeCode(code, lang, parent) {
+      const hashComments = ['python', 'py', 'bash', 'sh', 'shell', 'yaml', 'yml', 'ruby', 'rb', 'r', 'toml'].includes(lang);
+      const comment = hashComments ? '#[^\\n]*' : (lang === 'sql' ? '--[^\\n]*|/\\*[\\s\\S]*?(?:\\*/|$)' : '//[^\\n]*|/\\*[\\s\\S]*?(?:\\*/|$)');
+      const str = '"""[\\s\\S]*?(?:"""|$)|\'\'\'[\\s\\S]*?(?:\'\'\'|$)|"(?:\\\\.|[^"\\\\\\n])*"?|\'(?:\\\\.|[^\'\\\\\\n])*\'?|`(?:\\\\[\\s\\S]|[^`\\\\])*`?';
+      const re = new RegExp('(' + comment + ')|(' + str + ')|(0x[0-9a-fA-F]+\\b|\\b\\d+(?:\\.\\d+)?(?:[eE][+-]?\\d+)?\\b)|([A-Za-z_$][\\w$]*)|(&&|\\|\\||!(?!=))|(!=|[=+\\-*/%<>&|^~]+)', 'g');
+      const isBash = (lang === 'bash' || lang === 'sh' || lang === 'shell');
+      let last = 0, m, prevWord = '', prevEnd = 0;
+      while ((m = re.exec(code))) {
+        if (m.index > last) hlSpan(parent, code.slice(last, m.index), null);
+        const t = m[0];
+        let cls = null;
+        if (m[1]) cls = 'com';
+        else if (m[2]) {
+          cls = 'str';
+          if (lang === 'json' && /^\s*:/.test(code.slice(m.index + t.length, m.index + t.length + 20))) cls = 'type';
+        }
+        else if (m[3]) cls = 'num';
+        else if (m[4]) {
+          const gap = code.slice(prevEnd, m.index);
+          const before = /^\s*$/.test(gap) ? prevWord : '';
+          if (isBash && HL.bashCtrl.has(t)) cls = 'ctrl';
+          else if (HL.ctrl.has(t)) cls = 'ctrl';
+          else if (HL.decl.has(t)) cls = 'decl';
+          else if (HL.logic.has(t)) cls = 'logic';
+          else if (HL.consts.has(t)) cls = 'const';
+          else if (HL.types.has(t)) cls = 'type';
+          else if (code[m.index + t.length] === '(') cls = 'fn';
+          else if (['def', 'class', 'function', 'fn', 'func'].includes(before)) cls = 'fn';
+          prevWord = t; prevEnd = m.index + t.length;
+        }
+        else if (m[5]) cls = 'logic';
+        else if (m[6]) cls = 'op';
+        hlSpan(parent, t, cls);
+        last = m.index + t.length;
+        if (t.length === 0) re.lastIndex++;
+      }
+      if (last < code.length) hlSpan(parent, code.slice(last), null);
+    }
+
+    function highlightCSS(code, parent) {
+      let i = 0, depth = 0, expectProp = true;
+      const n = code.length;
+      const tokRe = /("(?:\\.|[^"\\\n])*"?|'(?:\\.|[^'\\\n])*'?)|(#[0-9a-fA-F]{3,8}\b)|(-?\d*\.?\d+(?:%|[a-zA-Z]+)?)|([A-Za-z_-][\w-]*)|(;)/g;
+      while (i < n) {
+        if (code.startsWith('/*', i)) {
+          let end = code.indexOf('*/', i + 2); end = end === -1 ? n : end + 2;
+          hlSpan(parent, code.slice(i, end), 'com'); i = end; continue;
+        }
+        const ch = code[i];
+        if (ch === '{') { depth++; expectProp = true; hlSpan(parent, ch, null); i++; continue; }
+        if (ch === '}') { depth = Math.max(0, depth - 1); hlSpan(parent, ch, null); i++; continue; }
+        let j = i;
+        while (j < n && code[j] !== '{' && code[j] !== '}' && !code.startsWith('/*', j)) j++;
+        const seg = code.slice(i, j);
+        if (depth === 0) { hlSpan(parent, seg, /\S/.test(seg) ? 'tag' : null); }
+        else {
+          tokRe.lastIndex = 0;
+          let last = 0, m;
+          while ((m = tokRe.exec(seg))) {
+            if (m.index > last) hlSpan(parent, seg.slice(last, m.index), null);
+            let cls = null;
+            if (m[1]) cls = 'str';
+            else if (m[2]) cls = 'const';
+            else if (m[3]) cls = 'num';
+            else if (m[4]) {
+              if (expectProp && /^\s*:/.test(seg.slice(m.index + m[0].length))) { cls = 'type'; expectProp = false; }
+            }
+            else if (m[5]) { expectProp = true; }
+            hlSpan(parent, m[0], cls);
+            last = m.index + m[0].length;
+          }
+          if (last < seg.length) hlSpan(parent, seg.slice(last), null);
+        }
+        i = j;
+      }
+    }
+
+    function htmlMarkup(text, parent) {
+      const re = /(<!--[\s\S]*?(?:-->|$))|(<![A-Za-z][^>]*>?)|(<\/?[A-Za-z][\w:-]*)|(\/?>)|([\w:@.-]+)(?=\s*=)|("[^"]*"?|'[^']*'?)/g;
+      let inTag = false, last = 0, m;
+      while ((m = re.exec(text))) {
+        if (m.index > last) hlSpan(parent, text.slice(last, m.index), null);
+        let cls = null;
+        if (m[1]) cls = 'com';
+        else if (m[2]) cls = 'decl';
+        else if (m[3]) { cls = 'tag'; inTag = true; }
+        else if (m[4]) { cls = 'tag'; inTag = false; }
+        else if (m[5]) cls = inTag ? 'type' : null;
+        else if (m[6]) cls = inTag ? 'str' : null;
+        hlSpan(parent, m[0], cls);
+        last = m.index + m[0].length;
+      }
+      if (last < text.length) hlSpan(parent, text.slice(last), null);
+    }
+
+    function highlightHTML(code, parent) {
+      let pos = 0, m;
+      const blockRe = /<(script|style)\b[^>]*>/gi;
+      while ((m = blockRe.exec(code))) {
+        const openEnd = m.index + m[0].length;
+        const c = code.slice(openEnd).search(new RegExp('</' + m[1] + '\\s*>', 'i'));
+        const innerEnd = c === -1 ? code.length : openEnd + c;
+        htmlMarkup(code.slice(pos, openEnd), parent);
+        highlightCode(code.slice(openEnd, innerEnd), m[1].toLowerCase() === 'script' ? 'js' : 'css', parent);
+        pos = innerEnd;
+        blockRe.lastIndex = innerEnd;
+      }
+      htmlMarkup(code.slice(pos), parent);
+    }
+
+    function highlightCode(code, lang, parent) {
+      lang = (lang || '').toLowerCase();
+      if (lang === 'html' || lang === 'htm' || lang === 'xml' || lang === 'svg') return highlightHTML(code, parent);
+      if (lang === 'css' || lang === 'scss') return highlightCSS(code, parent);
+      return tokenizeCode(code, lang, parent);
+    }
+
+    // ---------- Code boxes + incremental streaming renderer ----------
+    function splitCode(part) {
+      const nl = part.indexOf('\n');
+      return {
+        lang: (nl === -1 ? part : part.slice(0, nl)).trim() || 'code',
+        code: nl === -1 ? '' : part.slice(nl + 1).replace(/\n$/, '')
+      };
+    }
+
+    function makeCodeBox(lang, code, live) {
+      const box = document.createElement('div');
+      box.className = 'codebox';
+      const head = document.createElement('div');
+      head.className = 'code-head';
+      const label = document.createElement('span');
+      label.className = 'code-lang';
+      label.textContent = lang;
+      const actions = document.createElement('div');
+      actions.className = 'code-actions';
+      if (!live) {
+        const copyBtn = document.createElement('button');
+        copyBtn.className = 'code-btn';
+        copyBtn.title = 'Copy';
+        copyBtn.innerHTML = COPY_ICON;
+        copyBtn.onclick = async () => {
+          try { await navigator.clipboard.writeText(code); } catch (e) {
+            const ta = document.createElement('textarea'); ta.value = code; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
+          }
+          copyBtn.innerHTML = CHECK_ICON;
+          setTimeout(() => { copyBtn.innerHTML = COPY_ICON; }, 1200);
+        };
+        const dlBtn = document.createElement('button');
+        dlBtn.className = 'code-btn';
+        dlBtn.title = 'Download';
+        dlBtn.innerHTML = DOWNLOAD_ICON;
+        dlBtn.onclick = () => {
+          const key = lang.toLowerCase();
+          const ext = EXTENSIONS[key] || (/^[a-z0-9]{1,5}$/.test(key) && key !== 'code' ? key : 'txt');
+          const url = URL.createObjectURL(new Blob([code], { type: 'text/plain' }));
+          const a = document.createElement('a');
+          a.href = url; a.download = 'code.' + ext;
+          document.body.appendChild(a); a.click(); a.remove();
+          setTimeout(() => URL.revokeObjectURL(url), 1000);
+        };
+        actions.appendChild(copyBtn);
+        actions.appendChild(dlBtn);
+      }
+      head.appendChild(label);
+      head.appendChild(actions);
+      const pre = document.createElement('pre');
+      const c = document.createElement('code');
+      if (!live) highlightCode(code, lang, c);
+      pre.appendChild(c);
+      box.appendChild(head);
+      box.appendChild(pre);
+      return { box, label, codeEl: c };
+    }
+
+    // Safe inline formatting: **bold**, *italic*, ==highlight==, `code`, and <b>/<i>/<mark> tags.
+    // Everything is built with createElement/textContent, so model output can never inject real HTML.
+    function formatInline(text, depth) {
+      depth = depth || 0;
+      const frag = document.createDocumentFragment();
+      const re = /\*\*(?=\S)([^\n]+?)(?<=\S)\*\*|==(?=\S)([^\n]+?)(?<=\S)==|(?<![\w*])\*(?=[^\s*])([^*\n]+?)(?<=[^\s*])\*(?![\w*])|`([^`\n]+)`|<(b|strong)>([\s\S]*?)<\/\5>|<(i|em)>([\s\S]*?)<\/\7>|<mark>([\s\S]*?)<\/mark>/gi;
+      let last = 0, m;
+      const add = (tag, inner, cls, raw) => {
+        const e = document.createElement(tag);
+        if (cls) e.className = cls;
+        if (raw) e.textContent = inner; else e.appendChild(depth < 3 ? formatInline(inner, depth + 1) : document.createTextNode(inner));
+        frag.appendChild(e);
+      };
+      while ((m = re.exec(text)) !== null) {
+        if (m.index > last) frag.appendChild(document.createTextNode(text.slice(last, m.index)));
+        if (m[1] !== undefined) add('strong', m[1]);
+        else if (m[2] !== undefined) add('mark', m[2]);
+        else if (m[3] !== undefined) add('em', m[3]);
+        else if (m[4] !== undefined) add('span', m[4], 'inline-code', true);
+        else if (m[6] !== undefined) add('strong', m[6]);
+        else if (m[8] !== undefined) add('em', m[8]);
+        else add('mark', m[9]);
+        last = m.index + m[0].length;
+      }
+      if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
+      return frag;
+    }
+
+    // Only the newest part of a message is touched while streaming (new text fades in);
+    // finished parts are built once, and code is syntax-colored once when its block closes.
+    function createStreamRenderer(el) {
+      el.textContent = '';
+      let done = 0, live = null;
+      const proseText = (parts, i) => {
+        let t = parts[i];
+        if (i > 0) t = t.replace(/^\n/, '');
+        if (i < parts.length - 1) t = t.replace(/\n$/, '');
+        return t;
+      };
+      const fadeAppend = (target, text) => {
+        if (!text) return;
+        const sp = document.createElement('span');
+        sp.className = 'fade-in';
+        sp.textContent = text;
+        target.appendChild(sp);
+      };
+      return {
+        update(raw, final) {
+          const parts = raw.split('```');
+          const stable = final ? parts.length : parts.length - 1;
+          for (let i = done; i < stable; i++) {
+            let node = null;
+            if (i % 2 === 0) { const t = proseText(parts, i); if (t) node = formatInline(t); }
+            else { const { lang, code } = splitCode(parts[i]); node = makeCodeBox(lang, code, false).box; }
+            if (live && live.idx === i) { if (node) live.root.replaceWith(node); else live.root.remove(); live = null; }
+            else if (node) el.appendChild(node);
+          }
+          done = Math.max(done, stable);
+          if (final) return;
+          const i = parts.length - 1;
+          if (!live || live.idx !== i) {
+            if (i % 2 === 0) live = { idx: i, root: document.createElement('span'), len: 0 };
+            else { const b = makeCodeBox('code', '', true); live = { idx: i, root: b.box, label: b.label, codeEl: b.codeEl, len: 0 }; }
+            el.appendChild(live.root);
+          }
+          if (i % 2 === 0) {
+            const t = i > 0 ? parts[i].replace(/^\n/, '') : parts[i];
+            if (t.length !== live.len) { live.root.textContent = ''; live.root.appendChild(formatInline(t)); }
+            live.len = t.length;
+          } else {
+            const { lang, code } = splitCode(parts[i]);
+            live.label.textContent = lang;
+            fadeAppend(live.codeEl, code.slice(live.len));
+            live.len = code.length;
+          }
+        }
+      };
+    }
+
+    function renderRich(el, text) { createStreamRenderer(el).update(text, true); }
+
+    let stickToBottom = true;
+    chatContainer.addEventListener('scroll', () => {
+      stickToBottom = chatContainer.scrollHeight - chatContainer.scrollTop - chatContainer.clientHeight < 80;
+    });
+
+    function addCopyBar(div, text, instant) {
+      const bar = document.createElement('div');
+      bar.className = 'msg-actions show' + (instant ? ' static' : '');
+      const btn = document.createElement('button');
+      btn.className = 'code-btn';
+      btn.title = 'Copy';
+      btn.innerHTML = COPY_ICON;
+      btn.onclick = async () => {
+        try { await navigator.clipboard.writeText(text); } catch (e) {
+          const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
+        }
+        btn.innerHTML = CHECK_ICON;
+        setTimeout(() => { btn.innerHTML = COPY_ICON; }, 1200);
+      };
+      bar.appendChild(btn);
+      div.after(bar);
+    }
+
+    function appendMsg(role, text) {
+      const div = document.createElement('div');
+      div.className = `msg ${role}`;
+      if (role === 'assistant') { renderRich(div, text); if (text) div.classList.add('done', 'static'); } else div.innerText = text;
+      chatContainer.appendChild(div);
+      if (role === 'assistant' && text) addCopyBar(div, text, true);
+      if (role === 'user') stickToBottom = true;
+      if (stickToBottom) chatContainer.scrollTop = chatContainer.scrollHeight;
+      return div;
+    }
+
+    document.querySelector('.input-pill').addEventListener('click', (e) => {
+      if (!e.target.closest('button, #detach-btn')) userInput.focus();
+    });
+
+    sendBtn.onclick = handleSend;
+    userInput.onkeypress = (e) => { if (e.key === 'Enter') handleSend(); };
+
+    // If this model is already in the browser cache, load it automatically (no download button needed)
+    async function autoLoadIfCached() {
+      try {
+        if (!window.caches) return;
+        const adapter = await getGpuAdapter();
+        const hasGpu = gpuAllowed();
+        const f16 = adapter ? adapter.features.has('shader-f16') : true;
+        let urls = [];
+        for (const name of await caches.keys()) {
+          const c = await caches.open(name);
+          urls = urls.concat((await c.keys()).map(r => r.url));
+        }
+        for (let i = 0; i < MODELS.length; i++) {
+          if (provider === 'llama') { if (i !== llamaIdx) continue; }
+          else if (i === llamaIdx || (hasGpu ? failedModels.includes(i) : i !== cpuModelIdx)) continue;
+          const dtype = (!hasGpu || (MODELS[i].dtype === 'q4f16' && !f16)) ? 'q4' : MODELS[i].dtype;
+          if (urls.some(u => u.includes('/' + MODELS[i].id + '/') && u.includes('model_' + dtype + '.onnx'))) {
+            setModel(i);
+            statusText.innerText = 'Found cached model, loading...';
+            loadModelBtn.click();
+            return;
+          }
+        }
+      } catch (e) { console.warn('Cache check failed:', e); }
+    }
+    if (provider === 'llama') setModel(llamaIdx);
+    applyProvider();
+    if (provider !== 'grok') autoLoadIfCached();
+
+    renderHistory();
+  </script>
+</body>
+</html>
