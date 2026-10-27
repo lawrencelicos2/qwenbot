@@ -6,6 +6,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.css">
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     button, input, select, textarea { font-family: inherit; }
@@ -235,6 +236,29 @@
       font-size: 13px;
       line-height: 1.5;
     }
+
+    /* Image box (same look as the code box) */
+    .imgbox .img-body { padding: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; min-height: 120px; background: #ffffff; white-space: normal; }
+    .imgbox img { display: block; max-width: 100%; max-height: 520px; width: auto; height: auto; border-radius: 8px; object-fit: contain; }
+    .imgbox .img-status { font-size: 12px; color: #6b7280; display: flex; align-items: center; gap: 8px; text-align: center; }
+    .imgbox .img-err { color: #b91c1c; }
+    .imgbox .img-retry { border: 1px solid #d1d5db; background: #fff; border-radius: 8px; padding: 4px 10px; font-size: 12px; cursor: pointer; color: #374151; }
+    .imgbox .img-retry:hover { background: #f3f4f6; }
+    .img-spin { width: 14px; height: 14px; border: 2px solid #d1d5db; border-top-color: #6b7280; border-radius: 50%; animation: imgspin 0.8s linear infinite; display: inline-block; }
+    @keyframes imgspin { to { transform: rotate(360deg); } }
+    /* Pollinations model list (name on the left, image badge on the right) */
+    .pm-list { display: none; max-height: 240px; overflow: auto; border: 1px solid #d1d5db; border-radius: 8px; background: #fff; }
+    .pm-row { display: flex; align-items: center; gap: 8px; padding: 7px 10px; font-size: 12px; cursor: pointer; border-bottom: 1px solid #f3f4f6; }
+    .pm-row:last-child { border-bottom: none; }
+    .pm-row:hover { background: #f9fafb; }
+    .pm-row.sel { background: #eff6ff; }
+    .pm-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .pm-badge { font-size: 10px; color: #6d28d9; background: #f5f3ff; border: 1px solid #ddd6fe; border-radius: 999px; padding: 1px 8px; white-space: nowrap; }
+    /* Math */
+    .math-d { display: block; text-align: center; margin: 8px 0; overflow-x: auto; overflow-y: hidden; white-space: normal; }
+    .math-i, .math-pending { white-space: normal; }
+    .math-pending { font-family: 'Roboto Mono', monospace; color: #6b7280; }
+    .msg .katex { white-space: normal; }
 
     /* White edge fades (above chat/lines/scrollbar, below buttons) */
     .fade { position: fixed; left: 0; right: 0; pointer-events: none; z-index: 10; }
@@ -495,7 +519,7 @@
         <input type="text" id="poll-model" placeholder="Model (blank = auto-pick best, Grok first)" spellcheck="false"
           style="width:100%; padding:8px 10px; border-radius:8px; border:1px solid #d1d5db; font-size:12px; box-sizing:border-box;">
         <button class="action-btn" id="poll-models-btn">Load model list (find Grok etc.)</button>
-        <select id="poll-model-select" style="display:none; width:100%; padding:8px 10px; border-radius:8px; border:1px solid #d1d5db; font-size:12px; box-sizing:border-box;"></select>
+        <div id="poll-model-list" class="pm-list"></div>
         <button class="action-btn" id="poll-save-btn">Save</button>
         <button class="action-btn" id="poll-clear-btn">Clear My Key</button>
       </div>
@@ -875,26 +899,63 @@ self.onmessage = async (ev) => {
       const fell = pollModel && pollUsed && pollUsed !== pollModel;
       document.getElementById('model-label').innerText = (pollUsed || pollModel || 'openai') + ' (Pollinations' + (pollActiveKey() ? '' : ', free') + ')' + (fell ? ' - "' + pollModel + '" was refused, fell back' : '');
     }
-    // Lists every text model Pollinations offers right now (this list needs no key), so you can pick a Grok one
+    // Model list: chat models plus image models. A model that can make images gets an "Image generation" badge on the right.
+    // Click a chat model = use it for chat. Click a model with the badge = it also becomes the image maker.
+    // An image-only model just becomes the image maker (chat keeps using your chat model).
+    let pollImgModel = localStorage.getItem('qwen_poll_img_model') || '';
+    let pollRows = [];
+    const pollListEl = document.getElementById('poll-model-list');
+    function hasMod(m, what) { const a = m && (m.output_modalities || m.outputModalities); return Array.isArray(a) && a.includes(what); }
+    function renderPollList() {
+      pollListEl.textContent = '';
+      pollRows.forEach(row => {
+        const el = document.createElement('div');
+        el.className = 'pm-row' + ((row.id === pollModel || row.id === pollImgModel) ? ' sel' : '');
+        const name = document.createElement('span');
+        name.className = 'pm-name';
+        name.textContent = row.id;
+        el.appendChild(name);
+        if (row.image) {
+          const b = document.createElement('span');
+          b.className = 'pm-badge';
+          b.textContent = row.chat ? 'Image generation' : 'Image only';
+          el.appendChild(b);
+        }
+        el.onclick = () => {
+          if (row.chat) { pollModelInput.value = row.id; pollUsed = ''; }
+          if (row.image) { pollImgModel = row.id; try { localStorage.setItem('qwen_poll_img_model', pollImgModel); } catch (e) {} }
+          savePoll();
+          renderPollList();
+          statusText.innerText = (row.chat ? 'Chat model: ' + row.id + '. ' : '') + (row.image ? 'Image maker: ' + row.id + '.' : '');
+        };
+        pollListEl.appendChild(el);
+      });
+    }
+    async function getJson(url) { try { const r = await fetch(url); return r.ok ? await r.json() : null; } catch (e) { return null; } }
     document.getElementById('poll-models-btn').onclick = async () => {
-      const sel = document.getElementById('poll-model-select');
       statusText.innerText = 'Loading Pollinations models...';
       try {
-        const r = await fetch('https://gen.pollinations.ai/v1/models');
-        if (!r.ok) throw new Error('HTTP ' + r.status);
-        const j = await r.json();
-        const ids = (j.data || []).map(m => m.id).filter(Boolean);
-        ids.sort((a, b) => (/grok/i.test(b) ? 1 : 0) - (/grok/i.test(a) ? 1 : 0) || a.localeCompare(b));
-        sel.innerHTML = '<option value="">Pick a model...</option>' + ids.map(id => '<option value="' + id.replace(/"/g, '') + '">' + id.replace(/</g, '') + '</option>').join('');
-        sel.style.display = '';
-        statusText.innerText = ids.length + ' models loaded' + (ids.some(i => /grok/i.test(i)) ? ' (Grok ones are listed first).' : ', none named Grok right now.');
+        const [t, im] = await Promise.all([getJson('https://gen.pollinations.ai/v1/models'), getJson('https://gen.pollinations.ai/image/models')]);
+        const map = new Map();
+        ((t && t.data) || []).forEach(m => {
+          const id = m && (m.id || m.name); if (!id) return;
+          const mods = m.output_modalities || m.outputModalities;
+          map.set(id, { id, chat: !Array.isArray(mods) || mods.includes('text'), image: hasMod(m, 'image') });
+        });
+        (Array.isArray(im) ? im : ((im && (im.data || im.models)) || [])).forEach(m => {
+          const id = m && (m.id || m.name); if (!id || !hasMod(m, 'image')) return;
+          const cur = map.get(id);
+          if (cur) cur.image = true; else map.set(id, { id, chat: false, image: true });
+        });
+        pollRows = [...map.values()];
+        if (!pollRows.length) throw new Error('empty list');
+        const rank = (r) => (!r.chat ? 2 : (/grok/i.test(r.id) ? 0 : 1));
+        pollRows.sort((a, b) => rank(a) - rank(b) || a.id.localeCompare(b.id));
+        pollListEl.style.display = 'block';
+        renderPollList();
+        const nImg = pollRows.filter(r => r.image).length;
+        statusText.innerText = pollRows.length + ' models loaded, ' + nImg + ' can make images' + (pollRows.some(r => /grok/i.test(r.id)) ? ' (Grok ones first).' : '.');
       } catch (e) { statusText.innerText = 'Could not load the model list: ' + (e.message || e); }
-    };
-    document.getElementById('poll-model-select').onchange = (e) => {
-      if (!e.target.value) return;
-      pollModelInput.value = e.target.value;
-      pollUsed = '';
-      savePoll();
     };
     function savePoll() {
       pollKey = pollKeyInput.value.trim();
@@ -928,17 +989,19 @@ self.onmessage = async (ev) => {
         const c = JSON.parse(localStorage.getItem('qwen_poll_auto') || 'null');
         if (c && Array.isArray(c.ids) && Date.now() - c.t < 86400000) ids = c.ids;
       } catch (e) {}
-      if (!ids) {
+      let recentFail = 0;
+      try { recentFail = parseInt(localStorage.getItem('qwen_poll_auto_fail') || '0', 10) || 0; } catch (e) {}
+      if (!ids && Date.now() - recentFail > 600000) { // if the list could not be loaded in the last 10 minutes, do not make every message wait for it again
         try {
           const ac = new AbortController();
-          const tm = setTimeout(() => ac.abort(), 5000);
+          const tm = setTimeout(() => ac.abort(), 3000);
           const r = await fetch('https://gen.pollinations.ai/v1/models', { signal: ac.signal });
           clearTimeout(tm);
           if (r.ok) {
             ids = ((await r.json()).data || []).map(m => m.id).filter(Boolean);
             try { localStorage.setItem('qwen_poll_auto', JSON.stringify({ ids, t: Date.now() })); } catch (e) {}
-          }
-        } catch (e) {}
+          } else { try { localStorage.setItem('qwen_poll_auto_fail', String(Date.now())); } catch (e) {} }
+        } catch (e) { try { localStorage.setItem('qwen_poll_auto_fail', String(Date.now())); } catch (e2) {} }
       }
       if (!ids) return [];
       const bad = pollBadMap();
@@ -1011,7 +1074,7 @@ self.onmessage = async (ev) => {
           buf = buf.slice(nl + 1);
           if (!line.startsWith('data:')) continue;
           const data = line.slice(5).trim();
-          if (data === '[DONE]') return finish || 'stop';
+          if (data === '[DONE]') return finish;
           try {
             const j = JSON.parse(data);
             const c = j.choices && j.choices[0];
@@ -1023,21 +1086,43 @@ self.onmessage = async (ev) => {
       }
       return finish;
     }
-    // If the model hits its length cap (or the stream drops mid-answer, e.g. in the middle of a code block), ask it to carry on.
+    // The free tier often cuts long answers off mid-code. When that happens (length cap, a dropped stream, or the
+    // reply ending inside an open ``` code block) we ask the model to carry on, and stitch the pieces together
+    // without a repeated tail or a second code-fence opener.
     async function pollGenerate(messages, onTok) {
       updatePollLabel();
       let acc = '';
-      const tok = (t) => { acc += t; onTok(t); };
-      for (let round = 0; round < 4; round++) {
-        const msgs = round === 0 ? messages : messages.concat([
-          { role: 'assistant', content: acc },
-          { role: 'user', content: 'Your last message was cut off. Continue from exactly where it stopped. Do not repeat anything and do not add an introduction.' }
-        ]);
+      const inFence = () => (acc.match(/```/g) || []).length % 2 === 1;
+      for (let round = 0; round < 6; round++) {
         const before = acc.length;
-        const finish = await pollStreamOnce(msgs, tok);
-        const openFence = (acc.match(/```/g) || []).length % 2 === 1;
+        let finish;
+        if (round === 0) {
+          finish = await pollStreamOnce(messages, (t) => { acc += t; onTok(t); });
+        } else {
+          const wasInFence = inFence();
+          const msgs = messages.concat([
+            { role: 'assistant', content: acc },
+            { role: 'user', content: 'Your last message was cut off. It ended with: ' + JSON.stringify(acc.slice(-120)) + '\nContinue from exactly that point, starting with the very next characters. Do not repeat anything, do not add an introduction, and' + (wasInFence ? ' do not open a new code block (you are still inside one).' : ' keep the same formatting.') }
+          ]);
+          let head = '', released = false;
+          const release = () => {
+            released = true;
+            let h = head;
+            if (wasInFence) h = h.replace(/^\s*```[A-Za-z0-9_+-]*[ \t]*\r?\n?/, ''); // drop a fresh fence opener, we are already in a block
+            for (let k = Math.min(200, h.length, acc.length); k >= 8; k--) { // drop a repeated tail
+              if (acc.endsWith(h.slice(0, k))) { h = h.slice(k); break; }
+            }
+            if (h) { acc += h; onTok(h); }
+          };
+          finish = await pollStreamOnce(msgs, (t) => {
+            if (released) { acc += t; onTok(t); return; }
+            head += t;
+            if (head.length >= 220) release();
+          });
+          if (!released) release();
+        }
         if (acc.length === before) break; // nothing new came back, stop
-        if (finish === 'length' || (finish !== 'stop' && openFence)) continue;
+        if (finish === 'length' || inFence() || (finish === '' && round === 0 && acc.length > 1500)) continue;
         break;
       }
     }
@@ -1083,23 +1168,93 @@ self.onmessage = async (ev) => {
         renderHistory();
       } catch (e) { if (chat) chat.autoTitled = false; console.warn('Auto-title failed:', e); }
     }
+    // ---- Groq token limits ----
+    // Groq's free tier counts (your whole chat history + the reply space we ask for) against a tokens-per-minute cap
+    // (often 6000-8000). So we: 1) always send an explicit max_tokens, 2) trim the history to fit the cap,
+    // 3) read the real cap out of Groq's error and remember it per model, 4) retry smaller, or wait when the minute is used up.
+    function estTok(m) {
+      const c = m.content;
+      if (Array.isArray(c)) return c.reduce((n, p) => n + (p.type === 'text' ? Math.ceil(String(p.text).length / 3) : 1500), 0) + 8;
+      return Math.ceil(String(c).length / 3) + 8;
+    }
+    function fitMessages(msgs, budget) {
+      const sys = msgs[0] && msgs[0].role === 'system' ? msgs[0] : null;
+      const rest = sys ? msgs.slice(1) : msgs.slice();
+      let left = budget - (sys ? estTok(sys) : 0);
+      const kept = [];
+      for (let i = rest.length - 1; i >= 0; i--) {
+        const m = rest[i], t = estTok(m);
+        if (t <= left) { kept.unshift(m); left -= t; continue; }
+        if (kept.length === 0 || left > 400) { // the newest message is always sent, even if it has to be shortened
+          if (typeof m.content === 'string') {
+            const chars = Math.max(300, (left - 8) * 3);
+            const cut = kept.length === 0
+              ? (m.content.length > chars ? m.content.slice(0, Math.floor(chars / 2)) + '\n...[trimmed to fit the limit]...\n' + m.content.slice(-Math.floor(chars / 2)) : m.content)
+              : m.content.slice(0, chars) + ' ...[trimmed]';
+            kept.unshift({ role: m.role, content: cut });
+          } else kept.unshift(m);
+        }
+        break;
+      }
+      return sys ? [sys, ...kept] : kept;
+    }
+    function groqTpmMap() { try { return JSON.parse(localStorage.getItem('qwen_groq_tpm') || '{}') || {}; } catch (e) { return {}; } }
+    function groqTpmFor(model) { return groqTpmMap()[model] || 8000; }
+    function groqLearn(model, limit) { try { const m = groqTpmMap(); m[model] = limit; localStorage.setItem('qwen_groq_tpm', JSON.stringify(m)); } catch (e) {} }
+    function parseGroqLimit(txt) {
+      const out = { tpm: /\(TPM\)|tokens per minute/i.test(txt), limit: 0, requested: 0, wait: 0 };
+      let m;
+      if ((m = txt.match(/Limit\s+(\d+)/i))) out.limit = parseInt(m[1], 10);
+      if ((m = txt.match(/Requested\s+(\d+)/i))) out.requested = parseInt(m[1], 10);
+      if ((m = txt.match(/try again in\s+(?:(\d+)m)?\s*([\d.]+)\s*(ms|s)/i))) out.wait = ((m[1] ? parseInt(m[1], 10) * 60000 : 0) + parseFloat(m[2]) * (m[3] === 'ms' ? 1 : 1000));
+      return out;
+    }
     async function grokGenerate(messages, onTok) {
       if (!grokKey) throw new Error('No API key. Add one in Settings.');
-      const url = grokProvider(grokKey) === 'groq' ? 'https://api.groq.com/openai/v1/chat/completions' : 'https://api.x.ai/v1/chat/completions';
+      const isGroq = grokProvider(grokKey) === 'groq';
+      const url = isGroq ? 'https://api.groq.com/openai/v1/chat/completions' : 'https://api.x.ai/v1/chat/completions';
       const vision = messages.some(m => Array.isArray(m.content));
-      let res;
+      let res, squeeze = 1, waits = 0;
       groqVisionSkip = [];
-      for (let attempt = 0; attempt < 4; attempt++) {
+      for (let attempt = 0; attempt < 9; attempt++) {
         const model = await resolveGrokModel(vision);
+        const body = { model, messages, stream: true };
+        if (isGroq) {
+          const lim = groqTpmFor(model);
+          const outTok = Math.max(512, Math.min(4096, Math.floor(lim * 0.35)));
+          body.max_tokens = outTok;
+          body.messages = fitMessages(messages, Math.floor((lim - outTok - 250) * squeeze));
+        }
         res = await fetch(url, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + grokKey },
-          body: JSON.stringify({ model, messages, stream: true })
+          body: JSON.stringify(body)
         });
-        if (res.status === 404 && vision && grokProvider(grokKey) === 'groq') {
+        if (res.status === 404 && vision && isGroq) {
           groqVisionSkip.push(model);
           try { localStorage.removeItem('qwen_groq_vision'); } catch (e) {}
           continue;
+        }
+        if (isGroq && !res.ok && (res.status === 413 || res.status === 429)) {
+          let txt = '';
+          try { txt = await res.text(); } catch (e) {}
+          const info = parseGroqLimit(txt);
+          if (info.tpm) {
+            if (info.limit) groqLearn(model, info.limit);
+            if (res.status === 413 || (info.requested && info.limit && info.requested > info.limit)) {
+              squeeze *= 0.7; // still too big: send less history and try again
+              statusText.innerText = 'Trimming the chat to fit Groq\'s limit...';
+              continue;
+            }
+            if (waits < 3) { // the minute's tokens are used up: wait it out
+              waits++;
+              const w = Math.min(30000, (info.wait || 8000) + 500);
+              statusText.innerText = 'Groq limit reached, waiting ' + Math.ceil(w / 1000) + 's...';
+              await sleepMs(w);
+              continue;
+            }
+          }
+          throw new Error('API error ' + res.status + (txt ? ': ' + txt.slice(0, 300) : ''));
         }
         break;
       }
@@ -1195,7 +1350,15 @@ self.onmessage = async (ev) => {
       }
     };
 
-    const CHAT_SYSTEM = 'You are QwenBot, a warm, quick-witted assistant. Talk like a smart, friendly person: natural, conversational and curious, with a little humor when it fits. Match the mood and energy of the user, keep casual replies short, and never sound robotic, preachy or corporate. Ask a brief follow-up question only when it really helps. When the user asks for code, write complete, correct, working code inside a fenced code block with the language name right after the three backticks, with at most a couple of short sentences before or after it. If the user asks you to draw or show something visual in HTML (a circle, an animation, a page), give ONE complete self-contained HTML file with inline CSS and JS that actually renders it correctly when opened. Never put normal chat in a code block. You may use **bold** for key words, *italic* for light emphasis, and ==highlight== for the single most important phrase, but sparingly. Never use headers or markdown bullet syntax. Fenced code blocks are for code only.';
+    const FENCE = '```';
+    const CHAT_SYSTEM = [
+      'You are QwenBot, a warm, quick-witted assistant. You can chat about pretty much anything: answer questions, brainstorm ideas, give quick advice, or just be a friendly ear. Keep the tone conversational, never robotic, preachy or corporate. Match the mood and energy of the user, keep casual replies short, add a dash of humor when it fits, and emojis are always welcome. Ask a brief follow-up question only when it really helps.',
+      'FORMATTING: use **bold**, *italic*, and ==highlight== (sparingly) to make points pop. Never use headers or markdown bullet syntax. Never put normal chat in a code block.',
+      'CODE: when the user wants code, write complete, correct, working code in a fenced code block with the proper language tag right after the three backticks (python, javascript, html, css, sql and so on), ready to copy and paste, with at most a couple of short sentences before or after it. Fenced blocks are for code only.',
+      'MATH: write LaTeX inside \\( ... \\) for inline math or $$ ... $$ for display math. The app renders it into neat fractions, integrals, Greek symbols, matrices and so on.',
+      'HTML PAGES: you can generate a complete HTML page with inline CSS and JS. Give ONE complete self-contained html file that renders correctly when saved as a .html file and opened, which is perfect for little demos, animations, or custom-styled text.',
+      'IMAGES: you can generate images. When the user asks you to draw, paint, make or show a picture, reply with one short friendly sentence and then a fenced block whose language tag is image, containing only a detailed English description of the picture (subject, style, colors, lighting, composition). Example: ' + FENCE + 'image\na red fox in a snowy forest, watercolor, soft morning light' + FENCE + ' The app draws it in an image box under your message. Never say you cannot make images and never put an image link or markdown image in the reply.'
+    ].join(' ');
 
     historyToggle.onclick = () => historyDrawer.classList.toggle('active');
 
@@ -1919,6 +2082,132 @@ self.onmessage = async (ev) => {
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     };
 
+    // ---------- Image generation (Pollinations) ----------
+    // The AI writes a fenced block with the language "image" and a description inside. We draw it in a box like a code box.
+    const imgCache = new Map();
+    const IMG_LANG = /^(image|img|imagine|image-prompt|generate-image)$/i;
+    const REFRESH_ICON = '<svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" viewBox="0 0 24 24"><path d="M20 11a8 8 0 10-2.3 5.7"></path><path d="M20 4v7h-7"></path></svg>';
+    function hashStr(str) { let h = 2166136261; for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); } return (h >>> 0) % 1000000; }
+    function loadViaImg(url) {
+      return new Promise((res, rej) => {
+        const im = new Image();
+        const t = setTimeout(() => rej(new Error('timed out')), 90000);
+        im.onload = () => { clearTimeout(t); res(url); };
+        im.onerror = () => { clearTimeout(t); rej(new Error('image failed to load')); };
+        im.src = url;
+      });
+    }
+    async function pollImageSrc(prompt, seed) {
+      const models = [pollImgModel || 'flux', 'flux'].filter((m, i, a) => a.indexOf(m) === i);
+      const key = pollActiveKey();
+      const p = encodeURIComponent(prompt.slice(0, 900));
+      let last = null;
+      for (const model of models) {
+        const ck = model + '|' + seed + '|' + prompt;
+        if (imgCache.has(ck)) return imgCache.get(ck);
+        const q = '?model=' + encodeURIComponent(model) + '&width=1024&height=1024&seed=' + seed + '&nologo=true';
+        const tries = [];
+        if (key) tries.push({ url: 'https://gen.pollinations.ai/image/' + p + q, auth: key });
+        tries.push({ url: 'https://gen.pollinations.ai/image/' + p + q, auth: '' });
+        tries.push({ url: 'https://image.pollinations.ai/prompt/' + p + q, auth: '' });
+        for (const t of tries) {
+          try {
+            const r = await fetch(t.url, t.auth ? { headers: { 'Authorization': 'Bearer ' + t.auth } } : undefined);
+            if (r.ok && /^image\//i.test(r.headers.get('content-type') || '')) {
+              const blob = await r.blob();
+              const out = { src: URL.createObjectURL(blob), blob };
+              imgCache.set(ck, out);
+              return out;
+            }
+            last = new Error('Pollinations image error ' + r.status);
+          } catch (e) {
+            last = e;
+            if (!t.auth) { try { const src = await loadViaImg(t.url); const out = { src, blob: null }; imgCache.set(ck, out); return out; } catch (e2) { last = e2; } }
+          }
+        }
+      }
+      throw last || new Error('The image could not be made');
+    }
+    function makeImageBox(promptText) {
+      const prompt = String(promptText || '').trim();
+      const box = document.createElement('div');
+      box.className = 'codebox imgbox';
+      const head = document.createElement('div');
+      head.className = 'code-head';
+      const label = document.createElement('span');
+      label.className = 'code-lang';
+      label.textContent = 'image';
+      const actions = document.createElement('div');
+      actions.className = 'code-actions';
+      const mkBtn = (title, icon) => { const b = document.createElement('button'); b.className = 'code-btn'; b.title = title; b.innerHTML = icon; return b; };
+      const regenBtn = mkBtn('Make a new one', REFRESH_ICON);
+      const copyBtn = mkBtn('Copy description', COPY_ICON);
+      const dlBtn = mkBtn('Download', DOWNLOAD_ICON);
+      actions.appendChild(regenBtn); actions.appendChild(copyBtn); actions.appendChild(dlBtn);
+      head.appendChild(label); head.appendChild(actions);
+      const body = document.createElement('div');
+      body.className = 'img-body';
+      box.appendChild(head); box.appendChild(body);
+      let seed = hashStr(prompt), cur = null, started = false, gen = 0;
+      async function run() {
+        const my = ++gen;
+        body.textContent = '';
+        if (!prompt) { const n = document.createElement('div'); n.className = 'img-status'; n.textContent = 'No image description.'; body.appendChild(n); return; }
+        const st = document.createElement('div');
+        st.className = 'img-status';
+        const sp = document.createElement('span'); sp.className = 'img-spin';
+        st.appendChild(sp); st.appendChild(document.createTextNode('Generating image...'));
+        body.appendChild(st);
+        try {
+          const out = await pollImageSrc(prompt, seed);
+          if (my !== gen) return;
+          cur = out;
+          const im = document.createElement('img');
+          im.alt = prompt;
+          im.src = out.src;
+          body.textContent = '';
+          body.appendChild(im);
+        } catch (e) {
+          if (my !== gen) return;
+          body.textContent = '';
+          const er = document.createElement('div');
+          er.className = 'img-status img-err';
+          er.textContent = 'Could not make the image (' + String((e && e.message) || e).slice(0, 120) + '). A Pollinations key in Settings can help.';
+          const rb = document.createElement('button');
+          rb.className = 'img-retry'; rb.textContent = 'Try again';
+          rb.onclick = () => run();
+          body.appendChild(er); body.appendChild(rb);
+        }
+      }
+      regenBtn.onclick = () => { seed = Math.floor(Math.random() * 1000000); started = true; run(); };
+      copyBtn.onclick = async () => {
+        try { await navigator.clipboard.writeText(prompt); } catch (e) {
+          const ta = document.createElement('textarea'); ta.value = prompt; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove();
+        }
+        copyBtn.innerHTML = CHECK_ICON; setTimeout(() => { copyBtn.innerHTML = COPY_ICON; }, 1200);
+      };
+      dlBtn.onclick = async () => {
+        if (!cur) return;
+        try {
+          let blob = cur.blob;
+          if (!blob) blob = await (await fetch(cur.src)).blob();
+          const ext = /png/i.test(blob.type) ? 'png' : /webp/i.test(blob.type) ? 'webp' : 'jpg';
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url; a.download = 'image.' + ext;
+          document.body.appendChild(a); a.click(); a.remove();
+          setTimeout(() => URL.revokeObjectURL(url), 1000);
+        } catch (e) { window.open(cur.src, '_blank'); }
+      };
+      // Start when the box is on screen (so opening an old chat does not fire every image at once)
+      const go = () => { if (!started) { started = true; run(); } };
+      if ('IntersectionObserver' in window) {
+        const io = new IntersectionObserver((es) => { if (es.some(x => x.isIntersecting)) { io.disconnect(); go(); } });
+        io.observe(box);
+      } else go();
+      return { box };
+    }
+
     function makeCodeBox(lang, code, live) {
       const box = document.createElement('div');
       box.className = 'codebox';
@@ -1974,12 +2263,35 @@ self.onmessage = async (ev) => {
       return { box, label, codeEl: c };
     }
 
+    // ---------- Math (KaTeX): \( inline \), $$ display $$ and \[ display \] ----------
+    let katexLib = null;
+    const mathCache = new Map();
+    function renderMathEl(el) {
+      const tex = el.dataset.tex || '', disp = el.dataset.disp === '1';
+      if (!katexLib) { el.className = 'math-pending' + (disp ? ' math-d' : ''); el.textContent = tex; return; }
+      const key = (disp ? 'D' : 'I') + tex;
+      let html = mathCache.get(key);
+      if (html === undefined) {
+        try { html = katexLib.renderToString(tex, { throwOnError: false, displayMode: disp }); } catch (e) { html = null; }
+        mathCache.set(key, html);
+      }
+      if (html) { el.innerHTML = html; el.className = disp ? 'math-d' : 'math-i'; }
+      else { el.className = 'math-pending'; el.textContent = tex; }
+    }
+    (function loadKatex() {
+      const sc = document.createElement('script');
+      sc.src = 'https://cdn.jsdelivr.net/npm/katex@0.16.9/dist/katex.min.js';
+      sc.async = true;
+      sc.onload = () => { katexLib = window.katex || null; document.querySelectorAll('.math-pending').forEach(renderMathEl); };
+      document.head.appendChild(sc);
+    })();
+
     // Safe inline formatting: **bold**, *italic*, ==highlight==, `code`, and <b>/<i>/<mark> tags.
     // Everything is built with createElement/textContent, so model output can never inject real HTML.
     function formatInline(text, depth) {
       depth = depth || 0;
       const frag = document.createDocumentFragment();
-      const re = /\*\*(?=\S)([^\n]+?)(?<=\S)\*\*|==(?=\S)([^\n]+?)(?<=\S)==|(?<![\w*])\*(?=[^\s*])([^*\n]+?)(?<=[^\s*])\*(?![\w*])|`([^`\n]+)`|<(b|strong)>([\s\S]*?)<\/\5>|<(i|em)>([\s\S]*?)<\/\7>|<mark>([\s\S]*?)<\/mark>/gi;
+      const re = /\*\*(?=\S)([^\n]+?)(?<=\S)\*\*|==(?=\S)([^\n]+?)(?<=\S)==|(?<![\w*])\*(?=[^\s*])([^*\n]+?)(?<=[^\s*])\*(?![\w*])|`([^`\n]+)`|<(b|strong)>([\s\S]*?)<\/\5>|<(i|em)>([\s\S]*?)<\/\7>|<mark>([\s\S]*?)<\/mark>|\\\(([\s\S]+?)\\\)|\$\$([\s\S]+?)\$\$|\\\[([\s\S]+?)\\\]/gi;
       let last = 0, m;
       const add = (tag, inner, cls, raw) => {
         const e = document.createElement(tag);
@@ -1987,6 +2299,7 @@ self.onmessage = async (ev) => {
         if (raw) e.textContent = inner; else e.appendChild(depth < 3 ? formatInline(inner, depth + 1) : document.createTextNode(inner));
         frag.appendChild(e);
       };
+      const addMath = (tex, disp) => { const sp = document.createElement('span'); sp.dataset.tex = tex.trim(); sp.dataset.disp = disp ? '1' : '0'; renderMathEl(sp); frag.appendChild(sp); };
       while ((m = re.exec(text)) !== null) {
         if (m.index > last) frag.appendChild(document.createTextNode(text.slice(last, m.index)));
         if (m[1] !== undefined) add('strong', m[1]);
@@ -1995,7 +2308,10 @@ self.onmessage = async (ev) => {
         else if (m[4] !== undefined) add('span', m[4], 'inline-code', true);
         else if (m[6] !== undefined) add('strong', m[6]);
         else if (m[8] !== undefined) add('em', m[8]);
-        else add('mark', m[9]);
+        else if (m[9] !== undefined) add('mark', m[9]);
+        else if (m[10] !== undefined) addMath(m[10], false);
+        else if (m[11] !== undefined) addMath(m[11], true);
+        else addMath(m[12], true);
         last = m.index + m[0].length;
       }
       if (last < text.length) frag.appendChild(document.createTextNode(text.slice(last)));
@@ -2027,7 +2343,7 @@ self.onmessage = async (ev) => {
           for (let i = done; i < stable; i++) {
             let node = null;
             if (i % 2 === 0) { const t = proseText(parts, i); if (t) node = formatInline(t); }
-            else { const { lang, code } = splitCode(parts[i]); node = makeCodeBox(lang, code, false).box; }
+            else { const { lang, code } = splitCode(parts[i]); node = IMG_LANG.test(lang) ? makeImageBox(code).box : makeCodeBox(lang, code, false).box; }
             if (live && live.idx === i) { if (node) live.root.replaceWith(node); else live.root.remove(); live = null; }
             else if (node) el.appendChild(node);
           }
