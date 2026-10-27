@@ -32,6 +32,16 @@
     .side-line.left { left: max(4px, calc(50% - 372px)); }
     .side-line.right { left: min(calc(100% - 7px), calc(50% + 369px)); }
 
+    #brand-dot { display: inline-block; width: 0.26em; height: 0.26em; border-radius: 50%; background: #9ca3af; margin-right: 0.2em; vertical-align: middle; transition: background 0.3s ease; }
+    #brand-dot.ready { background: #3b82f6; }
+    /* logo: same height as a capital letter of the brand text (about 0.71em), sitting on the text baseline */
+    #brand-logo { display: inline-block; height: 0.71em; width: 0.71em; object-fit: cover; border-radius: 0.1em; margin-left: 0.16em; vertical-align: baseline; }
+    /* ". . ." shown in the chat while waiting for the first words (no bubble is drawn) */
+    .wait-dots { display: inline-block; color: #6b7280; font-size: 26px; font-weight: 700; line-height: 1; letter-spacing: 1px; }
+    .wait-dots i { font-style: normal; animation: waitPulse 1.2s infinite ease-in-out; }
+    .wait-dots i:nth-child(2) { animation-delay: 0.2s; }
+    .wait-dots i:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes waitPulse { 0%, 80%, 100% { opacity: 0.2; } 40% { opacity: 1; } }
     /* Top-left brand */
     .brand {
       position: absolute;
@@ -412,6 +422,18 @@
       text-overflow: ellipsis;
     }
     .history-item:hover { background: #f3f4f6; color: #111827; }
+    .history-item { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+    .hist-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .hist-x { flex-shrink: 0; width: 20px; height: 20px; padding: 0; border: none; background: transparent; color: #9ca3af; border-radius: 4px; font-size: 15px; line-height: 1; cursor: pointer; opacity: 0; transition: opacity 0.15s ease, background 0.15s ease; }
+    .history-item:hover .hist-x, .hist-x:focus-visible { opacity: 1; }
+    .hist-x:hover { background: #e5e7eb; color: #111827; }
+    @media (hover: none) { .hist-x { opacity: 1; } }
+    .hist-confirm { display: flex; align-items: center; justify-content: space-between; gap: 6px; width: 100%; color: #111827; }
+    .hist-confirm button { border: none; border-radius: 6px; padding: 3px 10px; font-size: 11px; cursor: pointer; }
+    .hist-yes { background: #ef4444; color: #fff; }
+    .hist-yes:hover { background: #dc2626; }
+    .hist-no { background: #e5e7eb; color: #374151; }
+    .hist-no:hover { background: #d1d5db; }
 
     .attachment-preview {
       display: none;
@@ -433,7 +455,7 @@
   <div class="fade fade-top"></div>
   <div class="fade fade-bottom"></div>
 
-  <div class="brand">QwenBot</div>
+  <div class="brand"><span id="brand-dot"></span>QwenBot<img id="brand-logo" src="https://yt3.ggpht.com/wkukhDxkd0RNkFVaFWjBtWF1OUPlgYU07M-cFGGqIEYkUj50bxVSI6A-mODHFAEgagjXQ8nHcymQJA=s512-c-fcrop64=1,00000000ffffffff-rw-nd-v1" alt="" referrerpolicy="no-referrer" onerror="this.style.display='none'"></div>
 
   <!-- Settings Menu -->
   <div class="top-controls">
@@ -444,9 +466,10 @@
       <div class="setting-group">
         <div class="setting-label">AI</div>
         <select id="provider-select">
+          <option value="pollinations">Pollinations (free, no key needed)</option>
+          <option value="grok">Grok / Groq (API key)</option>
           <option value="llama">Llama 3.2 3B (local, cached, needs GPU)</option>
           <option value="local">Small local model (offline, weak)</option>
-          <option value="grok">Grok / Groq (API key)</option>
         </select>
       </div>
 
@@ -461,6 +484,20 @@
         <button class="action-btn" id="grok-upload-btn">Upload Key File</button>
         <button class="action-btn" id="grok-clear-btn">Clear Saved Key</button>
         <input type="file" id="grok-file" accept=".txt,.key,.json,text/plain" style="display:none">
+      </div>
+
+      <div id="pollinations-settings" style="display:none; flex-direction:column; gap:10px;">
+        <div style="font-size:12px; color:#6b7280; text-align:center;">Works for everyone with no sign-in. Optional: use your own Pollinations key for your own limits.</div>
+        <a href="https://enter.pollinations.ai" target="_blank" rel="noopener noreferrer"
+          style="font-size:12px; color:#2563eb; text-decoration:underline; text-align:center;">Get a Pollinations key (optional)</a>
+        <input type="password" id="poll-key" placeholder="Your own key (pk_... or sk_...), optional" autocomplete="off" spellcheck="false"
+          style="width:100%; padding:8px 10px; border-radius:8px; border:1px solid #d1d5db; font-size:12px; box-sizing:border-box;">
+        <input type="text" id="poll-model" placeholder="Model (blank = auto-pick best, Grok first)" spellcheck="false"
+          style="width:100%; padding:8px 10px; border-radius:8px; border:1px solid #d1d5db; font-size:12px; box-sizing:border-box;">
+        <button class="action-btn" id="poll-models-btn">Load model list (find Grok etc.)</button>
+        <select id="poll-model-select" style="display:none; width:100%; padding:8px 10px; border-radius:8px; border:1px solid #d1d5db; font-size:12px; box-sizing:border-box;"></select>
+        <button class="action-btn" id="poll-save-btn">Save</button>
+        <button class="action-btn" id="poll-clear-btn">Clear My Key</button>
       </div>
 
       <div class="setting-group" id="device-group">
@@ -655,6 +692,7 @@ self.onmessage = async (ev) => {
     }
     function saveMessage(role, content, img) {
       const chat = chats[currentChatId];
+      if (!chat) return; // the chat was deleted while the reply was still coming in
       const msg = { role, content, time: Date.now() };
       if (img) msg.img = img;
       if (role === 'assistant') { const code = extractCode(content); if (code.length) msg.code = code; }
@@ -695,7 +733,10 @@ self.onmessage = async (ev) => {
     const providerSelect = document.getElementById('provider-select');
     const deviceSelect = document.getElementById('device-select');
     let provider = localStorage.getItem('qwen_provider');
-    if (provider !== 'llama' && provider !== 'local' && provider !== 'grok') provider = 'llama'; // default: Llama
+    if (provider !== 'llama' && provider !== 'local' && provider !== 'grok' && provider !== 'pollinations') provider = localStorage.getItem('qwen_grok_key') ? 'grok' : 'pollinations'; // default: Grok if you saved an xAI/Groq key in this browser, otherwise Pollinations (no key needed); old 'gemini' setting lands here too
+    // Gemini was removed: wipe its leftovers so a saved key doesn't sit in the browser
+    ['qwen_gemini_key', 'qwen_gemini_model', 'qwen_gemini_auto'].forEach(k => { try { localStorage.removeItem(k); } catch (e) {} });
+    function isApi() { return provider === 'grok' || provider === 'pollinations'; }
 
     // ---------- Grok (xAI API): key + model cached in localStorage ----------
     const grokKeyInput = document.getElementById('grok-key');
@@ -814,39 +855,233 @@ self.onmessage = async (ev) => {
       saveGrok();
     };
     // Quietly asks the API for a short topic/subject and uses it as the chat's name in History.
-    // Runs once per chat, in the background, only for Groq/Grok. Falls back to the first-message name on any failure.
-    async function autoTitleChat(chatId) {
+
+    // ---------- Pollinations: free, works for visitors with no sign-in and no key ----------
+    // OWNER: paste ONE Pollinations *publishable* key (pk_...) from https://enter.pollinations.ai here.
+    // pk_ keys are made for browser pages, and Pollinations counts their limits per visitor IP, so one
+    // key does NOT pool everyone's requests together. NEVER paste a secret key (sk_...) here: anyone can read this file.
+    const POLLINATIONS_OWNER_KEY = '';
+    const pollKeyInput = document.getElementById('poll-key');
+    const pollModelInput = document.getElementById('poll-model');
+    let pollKey = localStorage.getItem('qwen_poll_key') || '';
+    let pollModel = localStorage.getItem('qwen_poll_model') || '';
+    pollKeyInput.value = pollKey;
+    pollModelInput.value = pollModel;
+    const sleepMs = (ms) => new Promise(r => setTimeout(r, ms));
+    function pollActiveKey() { return pollKey || POLLINATIONS_OWNER_KEY; }
+    let pollUsed = '';
+    function updatePollLabel() {
+      if (provider !== 'pollinations') return;
+      const fell = pollModel && pollUsed && pollUsed !== pollModel;
+      document.getElementById('model-label').innerText = (pollUsed || pollModel || 'openai') + ' (Pollinations' + (pollActiveKey() ? '' : ', free') + ')' + (fell ? ' - "' + pollModel + '" was refused, fell back' : '');
+    }
+    // Lists every text model Pollinations offers right now (this list needs no key), so you can pick a Grok one
+    document.getElementById('poll-models-btn').onclick = async () => {
+      const sel = document.getElementById('poll-model-select');
+      statusText.innerText = 'Loading Pollinations models...';
       try {
-        const chat = chats[chatId];
-        if (!chat || chat.autoTitled || provider !== 'grok' || !grokKey) return;
+        const r = await fetch('https://gen.pollinations.ai/v1/models');
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const j = await r.json();
+        const ids = (j.data || []).map(m => m.id).filter(Boolean);
+        ids.sort((a, b) => (/grok/i.test(b) ? 1 : 0) - (/grok/i.test(a) ? 1 : 0) || a.localeCompare(b));
+        sel.innerHTML = '<option value="">Pick a model...</option>' + ids.map(id => '<option value="' + id.replace(/"/g, '') + '">' + id.replace(/</g, '') + '</option>').join('');
+        sel.style.display = '';
+        statusText.innerText = ids.length + ' models loaded' + (ids.some(i => /grok/i.test(i)) ? ' (Grok ones are listed first).' : ', none named Grok right now.');
+      } catch (e) { statusText.innerText = 'Could not load the model list: ' + (e.message || e); }
+    };
+    document.getElementById('poll-model-select').onchange = (e) => {
+      if (!e.target.value) return;
+      pollModelInput.value = e.target.value;
+      pollUsed = '';
+      savePoll();
+    };
+    function savePoll() {
+      pollKey = pollKeyInput.value.trim();
+      pollModel = pollModelInput.value.trim();
+      try { localStorage.setItem('qwen_poll_key', pollKey); localStorage.setItem('qwen_poll_model', pollModel); } catch (e) {}
+      statusText.innerText = pollKey ? 'Your Pollinations key saved.' : 'Saved. Using the shared free access.';
+      updatePollLabel();
+    }
+    document.getElementById('poll-save-btn').onclick = savePoll;
+    pollKeyInput.addEventListener('change', savePoll);
+    pollModelInput.addEventListener('change', savePoll);
+    document.getElementById('poll-clear-btn').onclick = () => {
+      pollKeyInput.value = '';
+      try { localStorage.removeItem('qwen_poll_key'); } catch (e) {}
+      savePoll();
+    };
+    // Auto-pick: asks Pollinations which text models exist right now (this list needs no key, cached 24h) and
+    // puts the newest full Grok first. Gemini is deliberately never auto-picked. Models that Pollinations refuses
+    // are remembered for 6 hours so they are not retried on every message.
+    const POLL_NOT_CHAT = /imagine|video|image|embed|tts|audio|whisper|transcri|code|coder|gemini|gemma/i;
+    function pollBadMap() { try { return JSON.parse(localStorage.getItem('qwen_poll_bad') || '{}') || {}; } catch (e) { return {}; } }
+    function pollMarkBad(ids) {
+      if (!ids.length) return;
+      const bad = pollBadMap();
+      ids.forEach(id => { bad[id] = Date.now(); });
+      try { localStorage.setItem('qwen_poll_bad', JSON.stringify(bad)); } catch (e) {}
+    }
+    async function pollAutoModels() {
+      let ids = null;
+      try {
+        const c = JSON.parse(localStorage.getItem('qwen_poll_auto') || 'null');
+        if (c && Array.isArray(c.ids) && Date.now() - c.t < 86400000) ids = c.ids;
+      } catch (e) {}
+      if (!ids) {
+        try {
+          const ac = new AbortController();
+          const tm = setTimeout(() => ac.abort(), 5000);
+          const r = await fetch('https://gen.pollinations.ai/v1/models', { signal: ac.signal });
+          clearTimeout(tm);
+          if (r.ok) {
+            ids = ((await r.json()).data || []).map(m => m.id).filter(Boolean);
+            try { localStorage.setItem('qwen_poll_auto', JSON.stringify({ ids, t: Date.now() })); } catch (e) {}
+          }
+        } catch (e) {}
+      }
+      if (!ids) return [];
+      const bad = pollBadMap();
+      const skip = (id) => bad[id] && Date.now() - bad[id] < 6 * 3600 * 1000;
+      const ver = (id) => parseFloat((id.match(/(\d+(?:\.\d+)?)/) || [0, 0])[1]) || 0;
+      return ids.filter(id => /^grok/i.test(id) && !POLL_NOT_CHAT.test(id) && !skip(id)).sort((a, b) => ver(b) - ver(a)).slice(0, 2);
+    }
+    // Sends one chat request. Order: owner/user key on gen.pollinations.ai, then the keyless endpoints.
+    // Each visitor's browser calls Pollinations directly, so limits are per visitor, never pooled.
+    async function pollRequest(messages, stream, extra) {
+      const key = pollActiveKey();
+      const GEN = 'https://gen.pollinations.ai/v1/chat/completions';
+      const ANON = 'https://text.pollinations.ai/openai';
+      const endpoints = key ? [{ url: GEN, auth: key }, { url: ANON, auth: '' }] : [{ url: ANON, auth: '' }, { url: GEN, auth: '' }];
+      const hasImage = messages.some(m => Array.isArray(m.content));
+      const auto = pollModel ? [] : await pollAutoModels();
+      const models = [pollModel, ...auto, 'openai', 'openai-fast'].filter((m, i, a) => m && a.indexOf(m) === i);
+      let last = null, sawAuth = false;
+      for (const ep of endpoints) {
+        let stopEp = false;
+        const failed = [];
+        for (const model of models) {
+          if (stopEp) break;
+          for (let attempt = 0; attempt < 3; attempt++) {
+            let res;
+            try {
+              res = await fetch(ep.url, {
+                method: 'POST',
+                headers: Object.assign({ 'Content-Type': 'application/json' }, ep.auth ? { 'Authorization': 'Bearer ' + ep.auth } : {}),
+                body: JSON.stringify(Object.assign({ model, messages, stream }, extra || {}))
+              });
+            } catch (e) { last = e; stopEp = true; break; } // network/CORS problem: go to the next endpoint
+            if (res.ok) {
+              if (!hasImage) pollMarkBad(failed.filter(m => auto.includes(m))); // earlier auto-picks were refused here, skip them for a while
+              if (stream) { pollUsed = model; updatePollLabel(); }
+              return res;
+            }
+            let detail = '';
+            try { detail = (await res.text()).slice(0, 300); } catch (e) {}
+            last = new Error('Pollinations error ' + res.status + (detail ? ': ' + detail : ''));
+            if (res.status === 429 && attempt < 2) {
+              const ra = parseFloat(res.headers.get('Retry-After'));
+              statusText.innerText = 'Pollinations is busy, retrying...';
+              await sleepMs(Math.min(8000, (ra > 0 ? ra * 1000 : 3500)));
+              continue;
+            }
+            if (res.status === 401 || res.status === 402 || res.status === 403) sawAuth = true;
+            if (res.status === 401) stopEp = true; // key itself rejected: try the next endpoint
+            else if (res.status !== 429) failed.push(model);
+            break; // anything else -> next model
+          }
+        }
+      }
+      if (sawAuth && !key) throw new Error('Pollinations refused a keyless request. Owner: paste a publishable key (pk_...) into POLLINATIONS_OWNER_KEY at the top of the Pollinations section in this file. Original error: ' + (last && last.message));
+      throw last || new Error('Pollinations could not be reached.');
+    }
+    // Streams one reply; returns the finish reason ('stop', 'length', ...) or '' if the stream just ended.
+    async function pollStreamOnce(messages, onTok) {
+      const res = await pollRequest(messages, true, { max_tokens: 4096 });
+      const reader = res.body.getReader();
+      const dec = new TextDecoder();
+      let buf = '', finish = '';
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        let nl;
+        while ((nl = buf.indexOf('\n')) >= 0) {
+          const line = buf.slice(0, nl).trim();
+          buf = buf.slice(nl + 1);
+          if (!line.startsWith('data:')) continue;
+          const data = line.slice(5).trim();
+          if (data === '[DONE]') return finish || 'stop';
+          try {
+            const j = JSON.parse(data);
+            const c = j.choices && j.choices[0];
+            const t = c && c.delta && c.delta.content;
+            if (t) onTok(t);
+            if (c && c.finish_reason) finish = c.finish_reason;
+          } catch (e) {}
+        }
+      }
+      return finish;
+    }
+    // If the model hits its length cap (or the stream drops mid-answer, e.g. in the middle of a code block), ask it to carry on.
+    async function pollGenerate(messages, onTok) {
+      updatePollLabel();
+      let acc = '';
+      const tok = (t) => { acc += t; onTok(t); };
+      for (let round = 0; round < 4; round++) {
+        const msgs = round === 0 ? messages : messages.concat([
+          { role: 'assistant', content: acc },
+          { role: 'user', content: 'Your last message was cut off. Continue from exactly where it stopped. Do not repeat anything and do not add an introduction.' }
+        ]);
+        const before = acc.length;
+        const finish = await pollStreamOnce(msgs, tok);
+        const openFence = (acc.match(/```/g) || []).length % 2 === 1;
+        if (acc.length === before) break; // nothing new came back, stop
+        if (finish === 'length' || (finish !== 'stop' && openFence)) continue;
+        break;
+      }
+    }
+
+    // Names the chat after its topic once the first reply is done (e.g. "How to bake cookies").
+    // Until then History shows the first prompt. If naming fails it retries after the next reply (up to 3 times).
+    async function autoTitleChat(chatId) {
+      const chat = chats[chatId];
+      try {
+        if (!chat || chat.autoTitled || !isApi() || (provider === 'grok' && !grokKey)) return;
+        if ((chat.titleTries || 0) >= 3) return;
+        chat.titleTries = (chat.titleTries || 0) + 1;
         chat.autoTitled = true;
-        const convoText = chat.messages.slice(0, 4).map(m => (m.role === 'user' ? 'User: ' : 'Assistant: ') + String(m.content).slice(0, 400)).join('\n');
-        const url = grokProvider(grokKey) === 'groq' ? 'https://api.groq.com/openai/v1/chat/completions' : 'https://api.x.ai/v1/chat/completions';
-        const titleModel = await resolveGrokModel();
-        const body = {
-            model: titleModel,
-            max_tokens: 400, // reasoning models (gpt-oss, qwen3) spend tokens thinking before the title
-            temperature: 0.3,
-            messages: [
-              { role: 'system', content: 'You name chats. Reply with ONLY the topic or subject of the conversation as a short title of 2 to 5 words. No quotes, no punctuation at the end, no extra text.' },
-              { role: 'user', content: convoText }
-            ]
-        };
-        if (/gpt-oss/i.test(titleModel)) body.reasoning_effort = 'low';
-        const res = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + grokKey },
-          body: JSON.stringify(body)
-        });
+        const firstUser = chat.messages.find(m => m.role === 'user');
+        const firstAi = chat.messages.find(m => m.role === 'assistant');
+        const convoText = 'User: ' + String(firstUser ? firstUser.content : '').slice(0, 500) + '\nAssistant: ' + String(firstAi ? firstAi.content : '').slice(0, 500);
+        const titleMsgs = [
+          { role: 'system', content: 'You name chats. Read the start of a conversation and reply with ONLY a short title of 2 to 6 words for the topic being discussed, worded like a clear topic or task, for example "How to bake cookies" or "Fixing a Python import error". No quotes, no ending punctuation, no extra text.' },
+          { role: 'user', content: convoText }
+        ];
+        let res;
+        if (provider === 'pollinations') {
+          await sleepMs(3500); // keep clear of the free tier's per-IP request spacing
+          res = await pollRequest(titleMsgs, false, { max_tokens: 400 }); // no temperature: some models reject anything but their default
+        } else {
+          const url = grokProvider(grokKey) === 'groq' ? 'https://api.groq.com/openai/v1/chat/completions' : 'https://api.x.ai/v1/chat/completions';
+          const titleModel = await resolveGrokModel();
+          const body = { model: titleModel, max_tokens: 400, temperature: 0.3, messages: titleMsgs }; // reasoning models (gpt-oss, qwen3) spend tokens thinking before the title
+          if (/gpt-oss/i.test(titleModel)) body.reasoning_effort = 'low';
+          res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + grokKey },
+            body: JSON.stringify(body)
+          });
+        }
         if (!res.ok) { chat.autoTitled = false; console.warn('Auto-title HTTP', res.status, await res.text().catch(() => '')); return; }
         const j = await res.json();
         let t = (j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || '';
-        t = t.replace(/<think>[\s\S]*?<\/think>/gi, '').replace(/["'`*#]/g, '').replace(/[.!?:]+$/, '').replace(/\s+/g, ' ').trim();
+        t = t.replace(/<think>[\s\S]*?<\/think>/gi, '').replace(/^\s*(chat\s*)?title\s*[:\-]\s*/i, '').replace(/["'`*#]/g, '').replace(/[.!?:]+$/, '').replace(/\s+/g, ' ').trim();
         if (!t || t.length > 60) { chat.autoTitled = false; console.warn('Auto-title gave unusable result:', JSON.stringify(j).slice(0, 300)); return; }
-        chat.title = t;
+        chat.title = t.charAt(0).toUpperCase() + t.slice(1);
         saveChats();
         renderHistory();
-      } catch (e) { console.warn('Auto-title failed:', e); }
+      } catch (e) { if (chat) chat.autoTitled = false; console.warn('Auto-title failed:', e); }
     }
     async function grokGenerate(messages, onTok) {
       if (!grokKey) throw new Error('No API key. Add one in Settings.');
@@ -905,12 +1140,16 @@ self.onmessage = async (ev) => {
 
     function applyProvider() {
       providerSelect.value = provider;
-      const g = provider === 'grok';
-      document.getElementById('grok-settings').style.display = g ? 'flex' : 'none';
+      const g = isApi();
+      document.getElementById('grok-settings').style.display = provider === 'grok' ? 'flex' : 'none';
+      document.getElementById('pollinations-settings').style.display = provider === 'pollinations' ? 'flex' : 'none';
       document.getElementById('local-settings').style.display = g ? 'none' : 'flex';
       document.getElementById('device-group').style.display = g ? 'none' : '';
       document.getElementById('gpu-test-btn').style.display = g ? 'none' : '';
-      if (g) { updateGrokLabel(); statusText.innerText = grokKey ? 'Status: API ready' : 'Status: Add your API key'; }
+      if (g) {
+        if (provider === 'pollinations') { updatePollLabel(); statusText.innerText = 'Status: API ready (no key needed)'; }
+        else { updateGrokLabel(); statusText.innerText = grokKey ? 'Status: API ready' : 'Status: Add your API key'; }
+      }
       else if (!modelReady) statusText.innerText = 'Status: Idle';
     }
     providerSelect.onchange = () => {
@@ -918,7 +1157,7 @@ self.onmessage = async (ev) => {
       localStorage.setItem('qwen_provider', provider);
       setModel(provider === 'llama' ? llamaIdx : pickLocalIdx());
       applyProvider();
-      if (provider !== 'grok' && !modelMatchesProvider()) autoLoadIfCached();
+      if (!isApi() && !modelMatchesProvider()) autoLoadIfCached();
     };
     deviceSelect.onchange = () => {
       deviceMode = deviceSelect.value;
@@ -975,7 +1214,7 @@ self.onmessage = async (ev) => {
       return i < 0 ? llamaIdx - 1 : i;
     }
     let loadedIdx = -1;
-    function modelMatchesProvider() { if (provider === 'grok') return !!grokKey; return modelReady && (loadedIdx === llamaIdx) === (provider === 'llama'); }
+    function modelMatchesProvider() { if (provider === 'grok') return !!grokKey; if (provider === 'pollinations') return true; return modelReady && (loadedIdx === llamaIdx) === (provider === 'llama'); }
     // Entries that genuinely crashed on this machine (the two Qwen 1.5B tries crashed earlier) are skipped.
     let failedModels = JSON.parse(localStorage.getItem('model_failed') || 'null');
     if (!Array.isArray(failedModels)) { failedModels = [0, 1]; localStorage.setItem('model_failed', JSON.stringify(failedModels)); }
@@ -1223,7 +1462,7 @@ self.onmessage = async (ev) => {
       const file = e.target.files[0];
       e.target.value = '';
       if (file && file.type.startsWith('image/')) {
-        if (provider !== 'grok') { statusText.innerText = 'Images only work with Grok / Groq. Switch the AI in Settings.'; return; }
+        if (!isApi()) { statusText.innerText = 'Images only work with Pollinations / Grok / Groq. Switch the AI in Settings.'; return; }
         try {
           attachedImage = { name: file.name, dataUrl: await loadImageFile(file) };
           attachedFile = null;
@@ -1257,11 +1496,51 @@ self.onmessage = async (ev) => {
         if (chat.title && chat.title.toLowerCase().includes(filter)) {
           const item = document.createElement('div');
           item.className = 'history-item';
-          item.innerText = chat.title;
-          item.onclick = () => loadChat(id);
+          const label = document.createElement('span');
+          label.className = 'hist-title';
+          label.textContent = chat.title;
+          const x = document.createElement('button');
+          x.type = 'button';
+          x.className = 'hist-x';
+          x.title = 'Delete chat';
+          x.setAttribute('aria-label', 'Delete chat');
+          x.textContent = '\u2715';
+          item.appendChild(label);
+          item.appendChild(x);
+          let confirming = false;
+          x.onclick = (e) => {
+            e.stopPropagation();
+            confirming = true;
+            item.textContent = '';
+            const box = document.createElement('div');
+            box.className = 'hist-confirm';
+            const q = document.createElement('span');
+            q.textContent = 'Are you sure?';
+            const yes = document.createElement('button');
+            yes.type = 'button'; yes.className = 'hist-yes'; yes.textContent = 'Yes';
+            const no = document.createElement('button');
+            no.type = 'button'; no.className = 'hist-no'; no.textContent = 'No';
+            yes.onclick = (ev) => { ev.stopPropagation(); deleteChat(id); };
+            no.onclick = (ev) => { ev.stopPropagation(); renderHistory(); };
+            box.appendChild(q); box.appendChild(yes); box.appendChild(no);
+            item.appendChild(box);
+          };
+          item.onclick = () => { if (!confirming) loadChat(id); };
           historyList.appendChild(item);
         }
       });
+    }
+
+    function deleteChat(id) {
+      delete chats[id];
+      saveChats();
+      if (id === currentChatId) { // deleted the open chat: go back to a fresh empty one
+        currentChatId = Date.now().toString();
+        hero.style.display = 'flex';
+        chatContainer.classList.remove('active');
+        chatContainer.innerHTML = '';
+      }
+      renderHistory();
     }
 
     function loadChat(id) {
@@ -1294,7 +1573,7 @@ self.onmessage = async (ev) => {
     // Local models keep the last 12. The newest message's image (if any) is sent as a real image, not as text.
     function buildHistory() {
       const msgs = chats[currentChatId].messages;
-      if (provider !== 'grok') return msgs.slice(-12).map(m => ({ role: m.role, content: m.content }));
+      if (!isApi()) return msgs.slice(-12).map(m => ({ role: m.role, content: m.content }));
       const out = []; let used = 0;
       for (let i = msgs.length - 1; i >= 0 && out.length < 500; i--) {
         const len = String(msgs[i].content).length;
@@ -1336,12 +1615,17 @@ self.onmessage = async (ev) => {
       const aiDiv = appendMsg('assistant', '');
 
       if (!modelMatchesProvider()) {
-        aiDiv.innerText = provider === 'grok' ? "Please add your API key in Settings first." : "Please click 'Import Model Folder' or 'Download & Cache Model' in Settings first.";
+        aiDiv.innerText = isApi() ? "Please add your API key in Settings first." : "Please click 'Import Model Folder' or 'Download & Cache Model' in Settings first.";
         return;
       }
 
       // Smooth reveal: tokens go into a buffer, and a few characters are shown per animation frame
       const renderer = createStreamRenderer(aiDiv);
+      setBusy(true);
+      const waitEl = document.createElement('span');
+      waitEl.className = 'wait-dots';
+      waitEl.innerHTML = '<i>.</i> <i>.</i> <i>.</i>';
+      aiDiv.appendChild(waitEl);
       let raw = '', shown = 0, generating = true, rafPending = false, resolveDrain;
       const drained = new Promise((r) => { resolveDrain = r; });
       function pump() {
@@ -1360,8 +1644,8 @@ self.onmessage = async (ev) => {
       // First token should arrive quickly on a working GPU; if it never does, treat WebGPU as dead
       async function generateOnce() {
         let timer = null, gotFirst = false;
-        const onTok = (t) => { if (!gotFirst) { gotFirst = true; clearTimeout(timer); } raw += t; kick(); };
-        if (provider !== 'grok' && activeDevice === 'webgpu') {
+        const onTok = (t) => { if (!gotFirst) { gotFirst = true; clearTimeout(timer); waitEl.remove(); } raw += t; kick(); };
+        if (!isApi() && activeDevice === 'webgpu') {
           timer = setTimeout(() => {
             if (gotFirst) return;
             const err = new Error('WebGPU timeout: no output after 90s');
@@ -1370,7 +1654,8 @@ self.onmessage = async (ev) => {
           }, 90000);
         }
         try {
-          if (provider === 'grok') await grokGenerate(convo, onTok);
+          if (provider === 'pollinations') await pollGenerate(convo, onTok);
+          else if (provider === 'grok') await grokGenerate(convo, onTok);
           else if (useMain) await mainGenerate(convo, onTok);
           else await workerGenerate(convo, onTok);
         } finally { clearTimeout(timer); }
@@ -1387,7 +1672,7 @@ self.onmessage = async (ev) => {
           await generateOnce();
         } catch (ge) {
           const gm = String((ge && ge.message) || ge);
-          const gpuFail = provider !== 'grok' && activeDevice === 'webgpu' && !raw.trim() &&
+          const gpuFail = !isApi() && activeDevice === 'webgpu' && !raw.trim() &&
             /abort|assert|device|lost|gpu|timeout|memory|buffer|map|webgpu|worker|shader|dispatch|compute/i.test(gm);
           if (!gpuFail) throw ge;
           console.warn('WebGPU failed while generating, retrying on CPU:', ge);
@@ -1401,8 +1686,11 @@ self.onmessage = async (ev) => {
           await generateOnce();
         }
         generating = false;
-        kick();
+        setBusy(false);
+        if (document.hidden) { shown = raw.length; resolveDrain(); } // background tab: animation frames don't run, so show everything at once
+        else kick();
         await drained;
+        waitEl.remove();
         renderer.update(raw, true);
         aiDiv.classList.add('done');
         try { const h = extractCode(raw).filter(b => isHtmlCode(b.lang, b.code)).pop(); if (h) openPreview(h.lang || 'html', h.code); } catch (pe) {}
@@ -1410,9 +1698,10 @@ self.onmessage = async (ev) => {
         if (stickToBottom) chatContainer.scrollTop = chatContainer.scrollHeight;
 
         saveMessage('assistant', raw);
-        if (provider === 'grok') autoTitleChat(currentChatId);
+        if (isApi()) autoTitleChat(currentChatId);
       } catch (e) {
         generating = false;
+        setBusy(false);
         if (raw.trim()) saveMessage('assistant', raw); // keep whatever was written before the error
         aiDiv.innerText = "Execution Error: " + friendlyError(e);
       }
@@ -1801,6 +2090,35 @@ self.onmessage = async (ev) => {
       return div;
     }
 
+    // Status dot: grey while the AI is loading or answering, blue when it is ready / finished.
+    // Shown next to "QwenBot" on the page and as the little icon on the browser tab.
+    let dotBusy = false, dotLast = '';
+    function setBusy(v) { dotBusy = v; refreshDot(); }
+    document.addEventListener('visibilitychange', () => refreshDot());
+    const brandDot = document.getElementById('brand-dot');
+    const favLink = document.createElement('link');
+    favLink.rel = 'icon';
+    document.head.appendChild(favLink);
+    function refreshDot() {
+      let ready = false;
+      try { ready = modelMatchesProvider(); } catch (e) {}
+      const state = (!dotBusy && ready) ? 'blue' : 'grey';
+      if (state === dotLast) return;
+      dotLast = state;
+      brandDot.classList.toggle('ready', state === 'blue');
+      try {
+        const c = document.createElement('canvas');
+        c.width = c.height = 64;
+        const g = c.getContext('2d');
+        g.fillStyle = state === 'blue' ? '#3b82f6' : '#9ca3af';
+        g.beginPath(); g.arc(32, 32, 24, 0, Math.PI * 2); g.fill();
+        favLink.type = 'image/png';
+        favLink.href = c.toDataURL('image/png');
+      } catch (e) {}
+    }
+    refreshDot();
+    setInterval(refreshDot, 400);
+
     document.querySelector('.input-pill').addEventListener('click', (e) => {
       if (!e.target.closest('button, #detach-btn')) userInput.focus();
     });
@@ -1835,7 +2153,7 @@ self.onmessage = async (ev) => {
     }
     if (provider === 'llama') setModel(llamaIdx);
     applyProvider();
-    if (provider !== 'grok') autoLoadIfCached();
+    if (!isApi()) autoLoadIfCached();
 
     renderHistory();
   </script>
